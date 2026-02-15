@@ -40,7 +40,7 @@ fn histogram(
   @builtin(local_invocation_id)   lid: vec3<u32>,
 ) {
   // Clear shared histogram
-  localHist[lid.x] = 0u;
+  atomicStore(&localHist[lid.x], 0u);
   workgroupBarrier();
 
   let tileStart = wgid.x * TILE_SIZE;
@@ -143,7 +143,7 @@ fn scatter(
 ) {
   // Load this workgroup's prefix sums for each digit
   // histBuf[digit * numWGs + wgid] = exclusive prefix sum = scatter base
-  localOffsets[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  atomicStore(&localOffsets[lid.x], histBuf[lid.x * su.numWGs + wgid.x]);
   workgroupBarrier();
 
   let tileStart = wgid.x * TILE_SIZE;

@@ -230,6 +230,90 @@ export class SplatRenderer {
     device.queue.submit([encoder.finish()]);
   }
 
+  /**
+   * DEBUG: bypass compute + sort entirely.
+   * Writes hardcoded preprocessed splats directly into the GPU buffers
+   * with identity sort order. If you see these, the render shader works.
+   */
+  setDebugScene(): void {
+    const device = this.gpu.device;
+
+    // 5 splats: center of screen + 4 offset
+    const splats = [
+      // center_ndc.xy, axis1_ndc.xy, axis2_ndc.xy, r, g, b, a, depth, pad
+      [  0.0,  0.0,  0.25, 0.0,  0.0, 0.25,  1.0, 0.2, 0.2, 0.9,  1.0, 0 ], // red center
+      [ -0.5,  0.0,  0.15, 0.0,  0.0, 0.15,  0.2, 1.0, 0.2, 0.9,  2.0, 0 ], // green left
+      [  0.5,  0.0,  0.15, 0.0,  0.0, 0.15,  0.2, 0.2, 1.0, 0.9,  3.0, 0 ], // blue right
+      [  0.0,  0.5,  0.15, 0.0,  0.0, 0.15,  1.0, 1.0, 0.2, 0.9,  4.0, 0 ], // yellow top
+      [  0.0, -0.5,  0.15, 0.0,  0.0, 0.15,  1.0, 1.0, 1.0, 0.9,  5.0, 0 ], // white bottom
+    ];
+
+    this.numSplats = splats.length;
+
+    // splatOut: 12 floats per splat
+    const splatOutData = new Float32Array(splats.length * SPLAT_FLOATS);
+    for (let i = 0; i < splats.length; i++) {
+      splatOutData.set(splats[i], i * SPLAT_FLOATS);
+    }
+
+    this.splatOutBuf?.destroy();
+    this.splatOutBuf = device.createBuffer({
+      size: splatOutData.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.splatOutBuf, 0, splatOutData);
+
+    // sortedIndices: identity [0, 1, 2, 3, 4]
+    const indices = new Uint32Array(splats.length);
+    for (let i = 0; i < splats.length; i++) indices[i] = i;
+
+    // We need this buffer for the render bind group.
+    // Store it so renderDebugFrame can use it.
+    this._debugSortBuf?.destroy();
+    this._debugSortBuf = device.createBuffer({
+      size: indices.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this._debugSortBuf, 0, indices);
+
+    this._debugMode = true;
+    console.log('[SplatRenderer] DEBUG scene set — 5 hardcoded splats');
+  }
+
+  private _debugMode = false;
+  private _debugSortBuf: GPUBuffer | null = null;
+
+  /** Render one frame in debug mode (no compute, no sort). */
+  private renderDebugFrame(): void {
+    const device = this.gpu.device;
+    const textureView = this.gpu.context.getCurrentTexture().createView();
+
+    const renderBG = device.createBindGroup({
+      layout: this.renderPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.splatOutBuf } },
+        { binding: 1, resource: { buffer: this._debugSortBuf! } },
+      ],
+    });
+
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.15, g: 0.15, b: 0.2, a: 1.0 }, // dark blue-gray so splats are visible
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+
+    pass.setPipeline(this.renderPipeline);
+    pass.setBindGroup(0, renderBG);
+    pass.draw(6, this.numSplats, 0, 0);
+    pass.end();
+
+    device.queue.submit([encoder.finish()]);
+  }
+
   dispose(): void {
     this.stopLoop();
     this.camera.detach();
@@ -239,6 +323,7 @@ export class SplatRenderer {
     this.colorBuf?.destroy();
     this.splatOutBuf?.destroy();
     this.preprocessUniformBuf?.destroy();
+    this._debugSortBuf?.destroy();
     this.sorter?.destroy();
     this.gpu.dispose();
   }
@@ -247,7 +332,11 @@ export class SplatRenderer {
 
   private tick = (): void => {
     if (!this.running) return;
-    this.renderFrame();
+    if (this._debugMode) {
+      this.renderDebugFrame();
+    } else {
+      this.renderFrame();
+    }
     this.onFrame?.();
     this.frameId = requestAnimationFrame(this.tick);
   };

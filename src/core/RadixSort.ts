@@ -113,14 +113,12 @@ export class RadixSort {
       this.device.queue.writeBuffer(this.uniformBuf, 0, uniformData);
 
       // --- Histogram pass ---
+      // histogram uses: su(0), keysIn(1), histBuf(5)
       const histBG = this.device.createBindGroup({
         layout: this.histogramPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: this.uniformBuf } },
           { binding: 1, resource: { buffer: readKeys } },
-          { binding: 2, resource: { buffer: readVals } },
-          { binding: 3, resource: { buffer: writeKeys } },
-          { binding: 4, resource: { buffer: writeVals } },
           { binding: 5, resource: { buffer: this.histogramBuf } },
         ],
       });
@@ -132,14 +130,11 @@ export class RadixSort {
       histPass.end();
 
       // --- Prefix sum pass ---
+      // prefixSum uses: su(0), histBuf(5)
       const prefixBG = this.device.createBindGroup({
         layout: this.prefixSumPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: this.uniformBuf } },
-          { binding: 1, resource: { buffer: readKeys } },
-          { binding: 2, resource: { buffer: readVals } },
-          { binding: 3, resource: { buffer: writeKeys } },
-          { binding: 4, resource: { buffer: writeVals } },
           { binding: 5, resource: { buffer: this.histogramBuf } },
         ],
       });
@@ -151,6 +146,7 @@ export class RadixSort {
       prefixPass.end();
 
       // --- Scatter pass ---
+      // scatter uses: su(0), keysIn(1), valsIn(2), keysOut(3), valsOut(4), histBuf(5)
       const scatterBG = this.device.createBindGroup({
         layout: this.scatterPipeline.getBindGroupLayout(0),
         entries: [

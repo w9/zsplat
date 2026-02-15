@@ -271,7 +271,7 @@ export class Camera {
     } else if (e.buttons & 1) {
       // Left-click: orbit
       this.vTheta -= dx * sens;
-      this.vPhi -= dy * sens;
+      this.vPhi += dy * sens;
       this.dirty = true;
     }
   }
@@ -334,7 +334,7 @@ function perspective(
   out[0] = f / aspect;
   out[1] = 0; out[2] = 0; out[3] = 0;
   out[4] = 0;
-  out[5] = f;
+  out[5] = -f; // negate y — WebGPU framebuffer y is top-down
   out[6] = 0; out[7] = 0;
   out[8] = 0; out[9] = 0;
   out[10] = far / (near - far);

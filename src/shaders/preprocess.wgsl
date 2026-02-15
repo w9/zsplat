@@ -169,17 +169,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // 3-sigma extent in pixels
-  let r1 = 3.0 * sqrt(lambda1);
-  let r2_val = 3.0 * sqrt(lambda2);
+  let extent1 = 3.0 * sqrt(lambda1);
+  let extent2 = 3.0 * sqrt(lambda2);
 
   // Cull tiny splats
-  if (r1 < 0.1 && r2_val < 0.1) {
+  if (extent1 < 0.1 && extent2 < 0.1) {
     writeInvisible(idx);
     return;
   }
 
   // Clamp max radius to avoid huge quads
-  let maxRadius = max(r1, r2_val);
+  let maxRadius = max(extent1, extent2);
   if (maxRadius > u.viewport.x * 2.0) {
     writeInvisible(idx);
     return;
@@ -191,8 +191,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // Convert pixel axes to NDC
   let pixToNdc = vec2<f32>(2.0 / u.viewport.x, 2.0 / u.viewport.y);
-  let axis1 = v1_2d * r1 * pixToNdc;
-  let axis2 = v2_2d * r2_val * pixToNdc;
+  let axis1 = v1_2d * extent1 * pixToNdc;
+  let axis2 = v2_2d * extent2 * pixToNdc;
 
   // ---- Write output ----
   let base = idx * 12u;
