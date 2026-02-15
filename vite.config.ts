@@ -1,43 +1,29 @@
-import { defineConfig } from "vite";
-import path from "node:path";
+import { defineConfig } from 'vite';
+import { resolve } from 'path';
+import dts from 'vite-plugin-dts';
 
-export default defineConfig(({ command }) => {
-  if (command === "serve") {
-    return {
-      root: "playground",
-      resolve: {
-        alias: {
-          "@": path.resolve(__dirname, "src")
-        }
-      },
-      server: {
-        fs: {
-          allow: [".."]
-        }
-      }
-    };
-  }
-
-  return {
-    resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "src")
-      }
+export default defineConfig({
+  plugins: [
+    dts({ include: ['src'], rollupTypes: true }),
+  ],
+  build: {
+    lib: {
+      entry: resolve(__dirname, 'src/index.ts'),
+      name: 'ZSplat',
+      formats: ['es', 'cjs'],
+      fileName: 'zsplat',
     },
-    build: {
-      lib: {
-        entry: {
-          index: path.resolve(__dirname, "src/index.ts"),
-          react: path.resolve(__dirname, "src/react.tsx")
+    rollupOptions: {
+      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      output: {
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM',
+          'react/jsx-runtime': 'jsxRuntime',
         },
-        formats: ["es"]
       },
-      rollupOptions: {
-        external: ["react", "react-dom"],
-        output: {
-          entryFileNames: "[name].js"
-        }
-      }
-    }
-  };
+    },
+    target: 'es2022',
+    sourcemap: true,
+  },
 });

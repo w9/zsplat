@@ -11,12 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "declaration": true,
-    "declarationDir": "./dist",
-    "outDir": "./dist",
-    "sourceMap": true,
     "types": ["@webgpu/types"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "playground"]
+  "include": ["src/**/*"]
 }

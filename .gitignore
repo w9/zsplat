@@ -4,3 +4,4 @@ dist
 dist-playground
 .vite
 examples/
+tmp/

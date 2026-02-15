@@ -1,40 +1,48 @@
 {
   "name": "zsplat",
   "version": "0.1.0",
-  "private": false,
-  "packageManager": "pnpm@9.12.3",
+  "description": "WebGPU Gaussian Splat renderer React component capable of rendering millions of 3D splats",
   "type": "module",
-  "sideEffects": false,
-  "files": [
-    "dist"
-  ],
+  "main": "./dist/zsplat.cjs",
+  "module": "./dist/zsplat.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./react": {
-      "types": "./dist/react.d.ts",
-      "import": "./dist/react.js"
+      "import": "./dist/zsplat.js",
+      "require": "./dist/zsplat.cjs"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "dev": "vite --config vite.playground.config.ts",
-    "build": "vite build && npm run build:types",
-    "build:types": "tsc -p tsconfig.build.json",
-    "build:playground": "vite build --config vite.playground.config.ts",
-    "preview": "vite preview --config vite.playground.config.ts"
+    "build": "tsc --noEmit && vite build",
+    "dev": "cd playground && vite",
+    "preview": "cd playground && vite preview"
   },
   "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18"
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24",
-    "@types/react": "^18.2.64",
-    "@webgpu/types": "^0.1.42",
-    "react": "^18.2.0",
-    "typescript": "^5.4.5",
-    "vite": "^5.2.0"
-  }
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@webgpu/types": "^0.1.69",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-plugin-dts": "^4.5.4"
+  },
+  "keywords": [
+    "gaussian-splatting",
+    "3d",
+    "webgpu",
+    "react",
+    "ply",
+    "splat",
+    "renderer"
+  ],
+  "license": "MIT"
 }

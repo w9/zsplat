@@ -1,38 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZSplat Playground</title>
-    <link rel="stylesheet" href="./style.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111; color: #eee; }
+    </style>
   </head>
   <body>
-    <div id="app">
-      <main class="stage">
-        <canvas id="view"></canvas>
-        <header class="top">
-          <div>
-            <h1>ZSplat Playground</h1>
-            <p>Load compressed PLY files and render them with WebGPU.</p>
-          </div>
-          <div class="controls">
-            <label class="file">
-              <input id="file" type="file" accept=".ply" />
-              <span>Open PLY</span>
-            </label>
-            <div class="url">
-              <input id="url" type="url" placeholder="https://.../model.ply" />
-              <button id="loadUrl">Load URL</button>
-            </div>
-          </div>
-        </header>
-        <div class="hud">
-          <div id="status">Idle</div>
-          <div id="stats">Splats: 0 | FPS: 0</div>
-        </div>
-        <div id="error" class="error" hidden></div>
-      </main>
-    </div>
-    <script type="module" src="./main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

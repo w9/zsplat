@@ -1,0 +1,22 @@
+{
+  "name": "zsplat-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zsplat": "file:.."
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@webgpu/types": "^0.1.69",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
