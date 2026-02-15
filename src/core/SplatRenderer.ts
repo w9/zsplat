@@ -238,14 +238,16 @@ export class SplatRenderer {
   setDebugScene(): void {
     const device = this.gpu.device;
 
-    // 5 splats: center of screen + 4 offset
+    // New layout: center.xy, extent.xy, conic.xyz, r, g, b, opacity, depth
+    // For a circular Gaussian with radius r in NDC: conic = diag(1/r², 0, 1/r²)
+    const r = 0.2;
+    const conic = 1.0 / (r * r);
     const splats = [
-      // center_ndc.xy, axis1_ndc.xy, axis2_ndc.xy, r, g, b, a, depth, pad
-      [  0.0,  0.0,  0.25, 0.0,  0.0, 0.25,  1.0, 0.2, 0.2, 0.9,  1.0, 0 ], // red center
-      [ -0.5,  0.0,  0.15, 0.0,  0.0, 0.15,  0.2, 1.0, 0.2, 0.9,  2.0, 0 ], // green left
-      [  0.5,  0.0,  0.15, 0.0,  0.0, 0.15,  0.2, 0.2, 1.0, 0.9,  3.0, 0 ], // blue right
-      [  0.0,  0.5,  0.15, 0.0,  0.0, 0.15,  1.0, 1.0, 0.2, 0.9,  4.0, 0 ], // yellow top
-      [  0.0, -0.5,  0.15, 0.0,  0.0, 0.15,  1.0, 1.0, 1.0, 0.9,  5.0, 0 ], // white bottom
+      [  0.0,  0.0,  r, r,  conic, 0, conic,  1.0, 0.2, 0.2, 0.9,  1.0 ], // red center
+      [ -0.5,  0.0,  r, r,  conic, 0, conic,  0.2, 1.0, 0.2, 0.9,  2.0 ], // green left
+      [  0.5,  0.0,  r, r,  conic, 0, conic,  0.2, 0.2, 1.0, 0.9,  3.0 ], // blue right
+      [  0.0,  0.5,  r, r,  conic, 0, conic,  1.0, 1.0, 0.2, 0.9,  4.0 ], // yellow top
+      [  0.0, -0.5,  r, r,  conic, 0, conic,  1.0, 1.0, 1.0, 0.9,  5.0 ], // white bottom
     ];
 
     this.numSplats = splats.length;

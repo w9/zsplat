@@ -22,10 +22,11 @@ export class RadixSort {
   private keysB!: GPUBuffer;
   private valsB!: GPUBuffer;
   private histogramBuf!: GPUBuffer;
-  private uniformBuf!: GPUBuffer;
+
+  // One uniform buffer per pass so writeBuffer calls don't clobber each other
+  private passUniformBufs: GPUBuffer[] = [];
 
   private capacity = 0;
-  private numWorkgroups = 0;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -50,21 +51,20 @@ export class RadixSort {
       compute: { module, entryPoint: 'scatter' },
     });
 
-    this.uniformBuf = this.device.createBuffer({
-      size: 16, // 4 x u32
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
+    // Pre-create one uniform buffer per pass
+    for (let i = 0; i < NUM_PASSES; i++) {
+      this.passUniformBufs.push(
+        this.device.createBuffer({
+          size: 16,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        }),
+      );
+    }
   }
 
-  /**
-   * Ensure internal buffers are large enough for `n` elements.
-   * The caller provides keysA and valsA pre-filled with data.
-   * Returns the buffer pair that contains the sorted result.
-   */
   ensureCapacity(n: number): void {
     if (n <= this.capacity) return;
 
-    // Destroy old buffers
     this.keysA?.destroy();
     this.valsA?.destroy();
     this.keysB?.destroy();
@@ -72,7 +72,7 @@ export class RadixSort {
     this.histogramBuf?.destroy();
 
     this.capacity = n;
-    this.numWorkgroups = Math.ceil(n / TILE_SIZE);
+    const numWGs = Math.ceil(n / TILE_SIZE);
 
     const bufSize = n * 4;
     const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
@@ -83,22 +83,28 @@ export class RadixSort {
     this.valsB = this.device.createBuffer({ size: bufSize, usage });
 
     this.histogramBuf = this.device.createBuffer({
-      size: RADIX * this.numWorkgroups * 4,
+      size: RADIX * numWGs * 4,
       usage: GPUBufferUsage.STORAGE,
     });
   }
 
-  /** Get the A-side key/value buffers (to be filled by preprocess). */
   getInputBuffers(): { keys: GPUBuffer; values: GPUBuffer } {
     return { keys: this.keysA, values: this.valsA };
   }
 
   /**
    * Encode sort commands into the given command encoder.
-   * After execution, sorted values (splat indices) are in the returned buffer.
+   * Returns the buffer containing sorted values (splat indices).
    */
   sort(encoder: GPUCommandEncoder, numElements: number): GPUBuffer {
     const numWGs = Math.ceil(numElements / TILE_SIZE);
+
+    // Write ALL per-pass uniforms up front — each to its OWN buffer
+    // so later writeBuffer calls don't overwrite earlier ones.
+    for (let pass = 0; pass < NUM_PASSES; pass++) {
+      const data = new Uint32Array([numElements, pass * 8, numWGs, 0]);
+      this.device.queue.writeBuffer(this.passUniformBufs[pass], 0, data);
+    }
 
     let readKeys = this.keysA;
     let readVals = this.valsA;
@@ -106,51 +112,42 @@ export class RadixSort {
     let writeVals = this.valsB;
 
     for (let pass = 0; pass < NUM_PASSES; pass++) {
-      const bitOffset = pass * 8;
+      const uBuf = this.passUniformBufs[pass];
 
-      // Write uniforms
-      const uniformData = new Uint32Array([numElements, bitOffset, numWGs, 0]);
-      this.device.queue.writeBuffer(this.uniformBuf, 0, uniformData);
-
-      // --- Histogram pass ---
-      // histogram uses: su(0), keysIn(1), histBuf(5)
+      // --- Histogram ---
       const histBG = this.device.createBindGroup({
         layout: this.histogramPipeline.getBindGroupLayout(0),
         entries: [
-          { binding: 0, resource: { buffer: this.uniformBuf } },
+          { binding: 0, resource: { buffer: uBuf } },
           { binding: 1, resource: { buffer: readKeys } },
           { binding: 5, resource: { buffer: this.histogramBuf } },
         ],
       });
+      const hp = encoder.beginComputePass();
+      hp.setPipeline(this.histogramPipeline);
+      hp.setBindGroup(0, histBG);
+      hp.dispatchWorkgroups(numWGs);
+      hp.end();
 
-      const histPass = encoder.beginComputePass();
-      histPass.setPipeline(this.histogramPipeline);
-      histPass.setBindGroup(0, histBG);
-      histPass.dispatchWorkgroups(numWGs);
-      histPass.end();
-
-      // --- Prefix sum pass ---
-      // prefixSum uses: su(0), histBuf(5)
+      // --- Prefix sum ---
       const prefixBG = this.device.createBindGroup({
         layout: this.prefixSumPipeline.getBindGroupLayout(0),
         entries: [
-          { binding: 0, resource: { buffer: this.uniformBuf } },
+          { binding: 0, resource: { buffer: uBuf } },
           { binding: 5, resource: { buffer: this.histogramBuf } },
         ],
       });
+      const pp = encoder.beginComputePass();
+      pp.setPipeline(this.prefixSumPipeline);
+      pp.setBindGroup(0, prefixBG);
+      pp.dispatchWorkgroups(1);
+      pp.end();
 
-      const prefixPass = encoder.beginComputePass();
-      prefixPass.setPipeline(this.prefixSumPipeline);
-      prefixPass.setBindGroup(0, prefixBG);
-      prefixPass.dispatchWorkgroups(1);
-      prefixPass.end();
-
-      // --- Scatter pass ---
-      // scatter uses: su(0), keysIn(1), valsIn(2), keysOut(3), valsOut(4), histBuf(5)
+      // --- Scatter ---
       const scatterBG = this.device.createBindGroup({
         layout: this.scatterPipeline.getBindGroupLayout(0),
         entries: [
-          { binding: 0, resource: { buffer: this.uniformBuf } },
+          { binding: 0, resource: { buffer: uBuf } },
           { binding: 1, resource: { buffer: readKeys } },
           { binding: 2, resource: { buffer: readVals } },
           { binding: 3, resource: { buffer: writeKeys } },
@@ -158,20 +155,18 @@ export class RadixSort {
           { binding: 5, resource: { buffer: this.histogramBuf } },
         ],
       });
-
-      const scatterPass = encoder.beginComputePass();
-      scatterPass.setPipeline(this.scatterPipeline);
-      scatterPass.setBindGroup(0, scatterBG);
-      scatterPass.dispatchWorkgroups(numWGs);
-      scatterPass.end();
+      const sp = encoder.beginComputePass();
+      sp.setPipeline(this.scatterPipeline);
+      sp.setBindGroup(0, scatterBG);
+      sp.dispatchWorkgroups(numWGs);
+      sp.end();
 
       // Ping-pong
       const tmpK = readKeys; readKeys = writeKeys; writeKeys = tmpK;
       const tmpV = readVals; readVals = writeVals; writeVals = tmpV;
     }
 
-    // After 4 passes (even number), result is back in the original read buffers
-    // For even number of passes, result is in keysA/valsA
+    // After 4 passes (even), result is back in keysA/valsA
     return readVals;
   }
 
@@ -181,6 +176,6 @@ export class RadixSort {
     this.keysB?.destroy();
     this.valsB?.destroy();
     this.histogramBuf?.destroy();
-    this.uniformBuf?.destroy();
+    for (const buf of this.passUniformBufs) buf.destroy();
   }
 }

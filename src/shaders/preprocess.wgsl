@@ -1,7 +1,7 @@
 // ============================================================
 // Preprocess compute shader
 // Per-splat: project 3D Gaussian to 2D screen space,
-// compute 2D covariance eigendecomposition for quad axes,
+// compute 2D covariance and its inverse (conic),
 // emit depth keys for sorting.
 // ============================================================
 
@@ -21,14 +21,22 @@ struct Uniforms {
 @group(0) @binding(3) var<storage, read> scales_in:  array<f32>;  // N*3 (already exp'd)
 @group(0) @binding(4) var<storage, read> colors_in:  array<f32>;  // N*4 (rgba)
 
-// Output: preprocessed splat data for rendering
-// Per splat: 12 floats packed as 3 vec4's
-//   [0]: center_ndc.xy, axis1_ndc.xy
-//   [1]: axis2_ndc.xy, color.rg
-//   [2]: color.b, opacity, depth (cam-space z), _pad
+// Output: preprocessed splat data for rendering (12 floats per splat)
+//   [0]:  center_ndc.x
+//   [1]:  center_ndc.y
+//   [2]:  extent_ndc.x  (half-width of bounding quad in NDC)
+//   [3]:  extent_ndc.y  (half-height)
+//   [4]:  conic_ndc.x   (inverse cov [0][0] in NDC space)
+//   [5]:  conic_ndc.y   (inverse cov [0][1] in NDC space)
+//   [6]:  conic_ndc.z   (inverse cov [1][1] in NDC space)
+//   [7]:  color.r
+//   [8]:  color.g
+//   [9]:  color.b
+//   [10]: opacity
+//   [11]: depth
 @group(0) @binding(5) var<storage, read_write> splatOut: array<f32>;
 
-// Sort keys (depth as sortable uint) and values (splat index)
+// Sort keys and values
 @group(0) @binding(6) var<storage, read_write> sortKeys:   array<u32>;
 @group(0) @binding(7) var<storage, read_write> sortValues: array<u32>;
 
@@ -66,157 +74,129 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let cam = u.view * vec4<f32>(pos, 1.0);
   let camPos = cam.xyz;
 
-  // Frustum / behind-camera cull
+  // Behind-camera cull
   if (camPos.z > -0.1) {
     writeInvisible(idx);
     return;
   }
 
   // ---- Compute 3D covariance ----
-  // Rotation matrix from quaternion
   let xx = qx * qx; let yy = qy * qy; let zz = qz * qz;
   let xy = qx * qy; let xz = qx * qz; let yz = qy * qz;
   let wx = qw * qx; let wy = qw * qy; let wz = qw * qz;
 
-  // R = rotation matrix (column-major vectors)
-  let r0 = vec3<f32>(1.0 - 2.0*(yy+zz), 2.0*(xy+wz), 2.0*(xz-wy));
-  let r1 = vec3<f32>(2.0*(xy-wz), 1.0 - 2.0*(xx+zz), 2.0*(yz+wx));
-  let r2 = vec3<f32>(2.0*(xz+wy), 2.0*(yz-wx), 1.0 - 2.0*(xx+yy));
+  // Rotation matrix columns
+  let rc0 = vec3<f32>(1.0 - 2.0*(yy+zz), 2.0*(xy+wz), 2.0*(xz-wy));
+  let rc1 = vec3<f32>(2.0*(xy-wz), 1.0 - 2.0*(xx+zz), 2.0*(yz+wx));
+  let rc2 = vec3<f32>(2.0*(xz+wy), 2.0*(yz-wx), 1.0 - 2.0*(xx+yy));
 
-  // M = R * S  (scale each column of R)
-  let m0 = r0 * sx;
-  let m1 = r1 * sy;
-  let m2 = r2 * sz;
+  // M = R * S
+  let m0 = rc0 * sx;
+  let m1 = rc1 * sy;
+  let m2 = rc2 * sz;
 
-  // 3D covariance Sigma = M * M^T  (symmetric 3x3)
-  let cov3d_00 = dot(m0, m0);
-  let cov3d_01 = dot(m0, m1);
-  let cov3d_02 = dot(m0, m2);
-  let cov3d_11 = dot(m1, m1);
-  let cov3d_12 = dot(m1, m2);
-  let cov3d_22 = dot(m2, m2);
+  // 3D covariance Sigma = M * M^T (symmetric)
+  let s00 = dot(m0, m0);
+  let s01 = dot(m0, m1);
+  let s02 = dot(m0, m2);
+  let s11 = dot(m1, m1);
+  let s12 = dot(m1, m2);
+  let s22 = dot(m2, m2);
 
-  // ---- Project to 2D ----
-  // View matrix upper-left 3x3 (W)
+  // ---- Project to 2D covariance ----
+  // View matrix rows (world→camera rotation)
   let W0 = vec3<f32>(u.view[0][0], u.view[1][0], u.view[2][0]);
   let W1 = vec3<f32>(u.view[0][1], u.view[1][1], u.view[2][1]);
   let W2 = vec3<f32>(u.view[0][2], u.view[1][2], u.view[2][2]);
 
-  // Focal lengths from projection matrix
-  let fx = u.proj[0][0] * u.viewport.x * 0.5;
-  let fy = u.proj[1][1] * u.viewport.y * 0.5;
+  // Focal lengths (use abs because proj[1][1] may be negative from y-flip)
+  let fx = abs(u.proj[0][0]) * u.viewport.x * 0.5;
+  let fy = abs(u.proj[1][1]) * u.viewport.y * 0.5;
 
-  let z = camPos.z;
-  let z2 = z * z;
+  let tz = camPos.z;
+  let tz2 = tz * tz;
 
-  // Jacobian of perspective projection: J = [[fx/z, 0, -fx*x/z^2], [0, fy/z, -fy*y/z^2]]
-  // T = J * W  (2x3 matrix)
-  let t0 = fx / z;
-  let t1 = fy / z;
-  let t2 = -fx * camPos.x / z2;
-  let t3 = -fy * camPos.y / z2;
+  // Jacobian of projection (camera → pixel): J = [[fx/z, 0, -fx*x/z²], [0, fy/z, -fy*y/z²]]
+  // Note: z is negative, so fx/z is negative; but T*Σ*T^T squares it out
+  let j00 = fx / tz;
+  let j02 = -fx * camPos.x / tz2;
+  let j11 = fy / tz;
+  let j12 = -fy * camPos.y / tz2;
 
-  // T = [[t0*W0.x + t2*W2.x, t0*W0.y + t2*W2.y, t0*W0.z + t2*W2.z],
-  //      [t1*W1.x + t3*W2.x, t1*W1.y + t3*W2.y, t1*W1.z + t3*W2.z]]
-  let T0 = t0 * W0 + t2 * W2;
-  let T1 = t1 * W1 + t3 * W2;
+  // T = J * W (2x3 matrix, rows are T0 and T1)
+  let T0 = j00 * W0 + j02 * W2;
+  let T1 = j11 * W1 + j12 * W2;
 
-  // 2D covariance: Sigma' = T * Sigma_3d * T^T  (symmetric 2x2)
-  // First compute V = Sigma_3d * T^T  (3x2)
-  let v0 = vec2<f32>(
-    cov3d_00 * T0.x + cov3d_01 * T0.y + cov3d_02 * T0.z,
-    cov3d_00 * T1.x + cov3d_01 * T1.y + cov3d_02 * T1.z
-  );
-  let v1 = vec2<f32>(
-    cov3d_01 * T0.x + cov3d_11 * T0.y + cov3d_12 * T0.z,
-    cov3d_01 * T1.x + cov3d_11 * T1.y + cov3d_12 * T1.z
-  );
-  let v2 = vec2<f32>(
-    cov3d_02 * T0.x + cov3d_12 * T0.y + cov3d_22 * T0.z,
-    cov3d_02 * T1.x + cov3d_12 * T1.y + cov3d_22 * T1.z
-  );
+  // 2D covariance in pixel space: cov = T * Sigma * T^T
+  // V = Sigma * T^T (3x2)
+  let v00 = s00*T0.x + s01*T0.y + s02*T0.z;
+  let v01 = s00*T1.x + s01*T1.y + s02*T1.z;
+  let v10 = s01*T0.x + s11*T0.y + s12*T0.z;
+  let v11 = s01*T1.x + s11*T1.y + s12*T1.z;
+  let v20 = s02*T0.x + s12*T0.y + s22*T0.z;
+  let v21 = s02*T1.x + s12*T1.y + s22*T1.z;
 
-  // Sigma' = T * V  (2x2 symmetric)
-  var cov_a = dot(T0, vec3<f32>(v0.x, v1.x, v2.x));
-  var cov_b = dot(T0, vec3<f32>(v0.y, v1.y, v2.y));
-  var cov_d = dot(T1, vec3<f32>(v0.y, v1.y, v2.y));
+  // cov = T * V (2x2 symmetric)
+  var cov_a = T0.x*v00 + T0.y*v10 + T0.z*v20;
+  var cov_b = T0.x*v01 + T0.y*v11 + T0.z*v21;
+  var cov_d = T1.x*v01 + T1.y*v11 + T1.z*v21;
 
-  // Add small regularization for numerical stability
+  // Regularization
   cov_a += 0.3;
   cov_d += 0.3;
 
-  // ---- Eigendecomposition of 2x2 symmetric matrix [[a,b],[b,d]] ----
-  let trace = cov_a + cov_d;
+  // ---- Compute conic (inverse of 2D cov) ----
   let det = cov_a * cov_d - cov_b * cov_b;
-  let disc = max(0.0001, trace * trace * 0.25 - det);
-  let sqrtDisc = sqrt(disc);
-  let lambda1 = max(0.0, trace * 0.5 + sqrtDisc);
-  let lambda2 = max(0.0, trace * 0.5 - sqrtDisc);
-
-  // Eigenvectors
-  var v1_2d = vec2<f32>(1.0, 0.0);
-  var v2_2d = vec2<f32>(0.0, 1.0);
-
-  if (abs(cov_b) > 1e-6) {
-    v1_2d = normalize(vec2<f32>(cov_b, lambda1 - cov_a));
-    v2_2d = normalize(vec2<f32>(cov_b, lambda2 - cov_a));
-  } else if (cov_a >= cov_d) {
-    v1_2d = vec2<f32>(1.0, 0.0);
-    v2_2d = vec2<f32>(0.0, 1.0);
-  } else {
-    v1_2d = vec2<f32>(0.0, 1.0);
-    v2_2d = vec2<f32>(1.0, 0.0);
+  if (det <= 0.0) {
+    writeInvisible(idx);
+    return;
   }
+  let inv_det = 1.0 / det;
+  let conic_a = cov_d * inv_det;   // inv[0][0]
+  let conic_b = -cov_b * inv_det;  // inv[0][1]
+  let conic_d = cov_a * inv_det;   // inv[1][1]
 
-  // 3-sigma extent in pixels
-  let extent1 = 3.0 * sqrt(lambda1);
-  let extent2 = 3.0 * sqrt(lambda2);
+  // ---- Bounding box (3σ) in pixels, then NDC ----
+  let radius_x = ceil(3.0 * sqrt(cov_a));
+  let radius_y = ceil(3.0 * sqrt(cov_d));
 
-  // Cull tiny splats
-  if (extent1 < 0.1 && extent2 < 0.1) {
+  if (radius_x < 1.0 && radius_y < 1.0) {
     writeInvisible(idx);
     return;
   }
 
-  // Clamp max radius to avoid huge quads
-  let maxRadius = max(extent1, extent2);
-  if (maxRadius > u.viewport.x * 2.0) {
-    writeInvisible(idx);
-    return;
-  }
+  // Convert pixel conic to NDC conic: conic_ndc = S * conic_pixel * S
+  // where S = diag(vp.x/2, vp.y/2)
+  let half_vp = u.viewport * 0.5;
+  let cn_a = conic_a * half_vp.x * half_vp.x;
+  let cn_b = conic_b * half_vp.x * half_vp.y;
+  let cn_d = conic_d * half_vp.y * half_vp.y;
 
-  // ---- Compute screen-space axes in NDC ----
+  // NDC extents
+  let ext_x = radius_x * 2.0 / u.viewport.x;
+  let ext_y = radius_y * 2.0 / u.viewport.y;
+
+  // ---- NDC center ----
   let clip = u.proj * cam;
   let ndc = clip.xy / clip.w;
 
-  // Convert pixel axes to NDC
-  let pixToNdc = vec2<f32>(2.0 / u.viewport.x, 2.0 / u.viewport.y);
-  let axis1 = v1_2d * extent1 * pixToNdc;
-  let axis2 = v2_2d * extent2 * pixToNdc;
-
   // ---- Write output ----
   let base = idx * 12u;
-  // vec4[0]: center_ndc.xy, axis1_ndc.xy
-  splatOut[base + 0u] = ndc.x;
-  splatOut[base + 1u] = ndc.y;
-  splatOut[base + 2u] = axis1.x;
-  splatOut[base + 3u] = axis1.y;
-  // vec4[1]: axis2_ndc.xy, color.rg
-  splatOut[base + 4u] = axis2.x;
-  splatOut[base + 5u] = axis2.y;
-  splatOut[base + 6u] = col.r;
-  splatOut[base + 7u] = col.g;
-  // vec4[2]: color.b, opacity, depth, _pad
-  splatOut[base + 8u] = col.b;
-  splatOut[base + 9u] = col.a;
-  splatOut[base + 10u] = -camPos.z; // positive depth for sorting
-  splatOut[base + 11u] = 0.0;
+  splatOut[base + 0u]  = ndc.x;
+  splatOut[base + 1u]  = ndc.y;
+  splatOut[base + 2u]  = ext_x;
+  splatOut[base + 3u]  = ext_y;
+  splatOut[base + 4u]  = cn_a;
+  splatOut[base + 5u]  = cn_b;
+  splatOut[base + 6u]  = cn_d;
+  splatOut[base + 7u]  = col.r;
+  splatOut[base + 8u]  = col.g;
+  splatOut[base + 9u]  = col.b;
+  splatOut[base + 10u] = col.a;
+  splatOut[base + 11u] = -camPos.z;
 
-  // ---- Sort key: float depth → sortable uint (back-to-front) ----
-  let depth = -camPos.z;
-  // Convert float to uint that sorts in increasing order
-  let depthBits = bitcast<u32>(depth);
-  // Flip for back-to-front: larger depth (farther) should come first (smaller key)
+  // ---- Sort key ----
+  let depthBits = bitcast<u32>(-camPos.z);
   let sortKey = 0xFFFFFFFFu - floatToSortableUint(depthBits);
   sortKeys[idx] = sortKey;
   sortValues[idx] = idx;
@@ -224,18 +204,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 fn writeInvisible(idx: u32) {
   let base = idx * 12u;
-  // Zero-size axes → invisible quad
   for (var j = 0u; j < 12u; j++) {
     splatOut[base + j] = 0.0;
   }
-  // Place behind everything with max sort key
   sortKeys[idx] = 0xFFFFFFFFu;
   sortValues[idx] = idx;
 }
 
 fn floatToSortableUint(bits: u32) -> u32 {
-  // IEEE 754 float → sortable uint:
-  // If sign bit is set, flip all bits; otherwise flip just sign bit
   let mask = select(0x80000000u, 0xFFFFFFFFu, (bits & 0x80000000u) != 0u);
   return bits ^ mask;
 }
