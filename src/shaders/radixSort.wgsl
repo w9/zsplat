@@ -132,7 +132,7 @@ fn prefixSum(
   }
 }
 
-// ---- Scatter ----
+// ---- Scatter (unstable — atomicAdd ordering is non-deterministic) ----
 var<workgroup> localOffsets: array<atomic<u32>, 256>;
 
 @compute @workgroup_size(256)
@@ -141,8 +141,6 @@ fn scatter(
   @builtin(workgroup_id)          wgid: vec3<u32>,
   @builtin(local_invocation_id)   lid: vec3<u32>,
 ) {
-  // Load this workgroup's prefix sums for each digit
-  // histBuf[digit * numWGs + wgid] = exclusive prefix sum = scatter base
   atomicStore(&localOffsets[lid.x], histBuf[lid.x * su.numWGs + wgid.x]);
   workgroupBarrier();
 
@@ -158,5 +156,74 @@ fn scatter(
       keysOut[dest] = key;
       valsOut[dest] = val;
     }
+  }
+}
+
+// ---- Stable Scatter (deterministic wave-based ordering) ----
+// Processes elements in waves of WG_SIZE. Within each wave, every
+// thread handles exactly one element. The rank of each element
+// within its digit bucket is computed by counting how many threads
+// with a lower lid.x share the same digit — this is deterministic
+// and preserves the input order, making the radix sort stable.
+
+var<workgroup> sharedDigits: array<u32, 256>;
+var<workgroup> cumOffset: array<u32, 256>;
+
+@compute @workgroup_size(256)
+fn stableScatter(
+  @builtin(workgroup_id)          wgid: vec3<u32>,
+  @builtin(local_invocation_id)   lid: vec3<u32>,
+) {
+  // Load this workgroup's global prefix-sum offsets per digit
+  cumOffset[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  workgroupBarrier();
+
+  let tileStart = wgid.x * TILE_SIZE;
+
+  // Process elements in waves (coalesced, deterministic order)
+  for (var wave = 0u; wave < ELEMENTS_PER_THREAD; wave++) {
+    let i = tileStart + wave * WG_SIZE + lid.x;
+
+    // Load element (or sentinel)
+    var myDigit = RADIX; // sentinel: "no element"
+    var myKey = 0u;
+    var myVal = 0u;
+    if (i < su.numElements) {
+      myKey = keysIn[i];
+      myVal = valsIn[i];
+      myDigit = (myKey >> su.bitOffset) & 0xFFu;
+    }
+
+    // Publish digit so all threads can see each other's digits
+    sharedDigits[lid.x] = myDigit;
+    workgroupBarrier();
+
+    // Compute rank: count threads with lower lid.x that share my digit
+    if (myDigit < RADIX) {
+      var rank = cumOffset[myDigit];
+      for (var j = 0u; j < lid.x; j++) {
+        if (sharedDigits[j] == myDigit) {
+          rank++;
+        }
+      }
+      keysOut[rank] = myKey;
+      valsOut[rank] = myVal;
+    }
+
+    workgroupBarrier();
+
+    // Update cumulative offsets: each thread counts one digit
+    // (thread lid.x counts how many elements had digit == lid.x)
+    if (lid.x < RADIX) {
+      var count = 0u;
+      for (var j = 0u; j < WG_SIZE; j++) {
+        if (sharedDigits[j] == lid.x) {
+          count++;
+        }
+      }
+      cumOffset[lid.x] += count;
+    }
+
+    workgroupBarrier();
   }
 }

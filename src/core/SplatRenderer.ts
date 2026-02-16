@@ -2,6 +2,7 @@ import type { SplatData } from '../types';
 import type { Sorter } from './Sorter';
 import { WebGPUContext } from './WebGPUContext';
 import { RadixSort } from './RadixSort';
+import { StableRadixSort } from './StableRadixSort';
 import { CpuSort } from './CpuSort';
 import { Camera } from './Camera';
 import preprocessWGSL from '../shaders/preprocess.wgsl?raw';
@@ -10,7 +11,7 @@ import renderWGSL from '../shaders/render.wgsl?raw';
 const PREPROCESS_WG_SIZE = 256;
 const SPLAT_FLOATS = 12;
 
-export type SortMethod = 'cpu' | 'gpu';
+export type SortMethod = 'cpu' | 'gpu' | 'gpu-unstable';
 
 /**
  * Main Gaussian Splat renderer.
@@ -82,9 +83,11 @@ export class SplatRenderer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.sorter = this.sortMethod === 'gpu'
-      ? new RadixSort(device)
-      : new CpuSort(device);
+    switch (this.sortMethod) {
+      case 'gpu':          this.sorter = new StableRadixSort(device); break;
+      case 'gpu-unstable': this.sorter = new RadixSort(device); break;
+      default:             this.sorter = new CpuSort(device); break;
+    }
   }
 
   setScene(data: SplatData): void {
