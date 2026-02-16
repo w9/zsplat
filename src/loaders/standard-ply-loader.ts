@@ -39,10 +39,19 @@ export function loadStandardPly(buffer: ArrayBuffer, ply: PlyFile): SplatData {
     }
   }
 
+  // Detect how many SH rest coefficients are available
+  const shProps: string[] = [];
+  for (let i = 0; i < 45; i++) {
+    if (propIndex.has(`f_rest_${i}`)) shProps.push(`f_rest_${i}`);
+    else break;
+  }
+  const hasSH = shProps.length >= 3; // at least band 1 (3 coefficients per channel = 9 total)
+
   const positions = new Float32Array(count * 3);
   const rotations = new Float32Array(count * 4);
   const scales = new Float32Array(count * 3);
   const colors = new Float32Array(count * 4);
+  const shCoeffs = hasSH ? new Float32Array(count * 45) : undefined;
 
   const boundsMin: [number, number, number] = [Infinity, Infinity, Infinity];
   const boundsMax: [number, number, number] = [-Infinity, -Infinity, -Infinity];
@@ -94,6 +103,15 @@ export function loadStandardPly(buffer: ArrayBuffer, ply: PlyFile): SplatData {
     const logit = values[propIndex.get('opacity')!];
     colors[i * 4 + 3] = 1.0 / (1.0 + Math.exp(-logit));
 
+    // SH rest coefficients (bands 1-3)
+    // Standard PLY layout: f_rest_0..44 ordered as [R0..R14, G0..G14, B0..B14]
+    if (shCoeffs && hasSH) {
+      for (let k = 0; k < shProps.length && k < 45; k++) {
+        shCoeffs[i * 45 + k] = values[propIndex.get(shProps[k])!];
+      }
+      // remaining coefficients stay 0
+    }
+
     // Bounds
     boundsMin[0] = Math.min(boundsMin[0], px);
     boundsMin[1] = Math.min(boundsMin[1], py);
@@ -109,6 +127,7 @@ export function loadStandardPly(buffer: ArrayBuffer, ply: PlyFile): SplatData {
     rotations,
     scales,
     colors,
+    shCoeffs,
     bounds: { min: boundsMin, max: boundsMax },
   };
 }

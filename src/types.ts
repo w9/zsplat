@@ -25,6 +25,9 @@ export interface SplatData {
   rotations: Float32Array;   // count * 4  (qw, qx, qy, qz)
   scales: Float32Array;      // count * 3  (sx, sy, sz) — already exp'd
   colors: Float32Array;      // count * 4  (r, g, b, a)  — 0..1 linear
+  /** SH bands 1-3 coefficients. 45 floats per splat (15 coefficients × 3 channels).
+   *  Layout: [R0..R14, G0..G14, B0..B14] per splat. Omit if no SH data. */
+  shCoeffs?: Float32Array;   // count * 45
   bounds: {
     min: [number, number, number];
     max: [number, number, number];
@@ -61,6 +64,8 @@ export interface ZSplatProps {
   style?: React.CSSProperties;
   className?: string;
   camera?: Partial<CameraState>;
+  /** Enable SH bands 1-3 for view-dependent color. Default true. */
+  shEnabled?: boolean;
   onLoad?: (info: { numSplats: number }) => void;
   onError?: (err: Error) => void;
   onStats?: (stats: SplatStats) => void;

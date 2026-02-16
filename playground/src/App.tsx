@@ -8,6 +8,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [shEnabled, setShEnabled] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File) => {
@@ -76,7 +77,7 @@ export function App() {
 
       {src ? (
         <ZSplat src={src} style={{ width: '100%', height: '100%', display: 'block' }}
-          onLoad={handleLoad} onError={handleError} onStats={handleStats} />
+          shEnabled={shEnabled} onLoad={handleLoad} onError={handleError} onStats={handleStats} />
       ) : (
         <div style={welcomeStyle}>
           <div style={{ fontSize: 48, fontWeight: 800, letterSpacing: -2, marginBottom: 8 }}>ZSplat</div>
@@ -93,6 +94,14 @@ export function App() {
           <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: -0.5 }}>ZSplat</span>
           <button style={buttonStyle} onClick={openFilePicker}>Open PLY</button>
           <span style={{ fontSize: 11, opacity: 0.4 }}>Ctrl+O</span>
+          {src && <button style={{
+            ...buttonStyle,
+            background: shEnabled ? 'rgba(100,255,100,0.15)' : 'rgba(255,100,100,0.15)',
+            borderColor: shEnabled ? 'rgba(100,255,100,0.4)' : 'rgba(255,100,100,0.4)',
+            color: shEnabled ? '#8f8' : '#f88',
+          }} onClick={() => setShEnabled(v => !v)}>
+            SH {shEnabled ? 'ON' : 'OFF'}
+          </button>}
         </div>
         {stats && (
           <div style={{ display: 'flex', gap: 16, fontSize: 12, opacity: 0.8 }}>

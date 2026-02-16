@@ -5,6 +5,7 @@ import { Camera } from './core/Camera';
 import { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
+import { loadSog, isSogFile } from './loaders/sog-loader';
 
 /**
  * React component that renders 3D Gaussian Splats via WebGPU.
@@ -13,12 +14,19 @@ import { loadStandardPly } from './loaders/standard-ply-loader';
  * <ZSplat src="scene.compressed.ply" style={{ width: '100%', height: '100vh' }} />
  * ```
  */
-export function ZSplat({ src, style, className, camera, onLoad, onError, onStats }: ZSplatProps) {
+export function ZSplat({ src, style, className, camera, shEnabled = true, onLoad, onError, onStats }: ZSplatProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SplatRenderer | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
   const statsRef = useRef<SplatStats>({ numSplats: 0, loadTimeMs: 0, fps: 0, gpuMemoryBytes: 0 });
   const frameTimesRef = useRef<number[]>([]);
+
+  // Sync shEnabled prop to renderer
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.shEnabled = shEnabled;
+    }
+  }, [shEnabled]);
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -60,16 +68,14 @@ export function ZSplat({ src, style, className, camera, onLoad, onError, onStats
           return;
         }
 
-        // Load the PLY
+        // Load splat data (PLY or SOG)
         const loadStart = performance.now();
-        const buffer = await loadSource(src);
+        const splatData = await loadSplatData(src);
 
         if (destroyed) {
           renderer.dispose();
           return;
         }
-
-        const splatData = parseSplatData(buffer);
 
         renderer.setScene(splatData);
 
@@ -125,18 +131,23 @@ export function ZSplat({ src, style, className, camera, onLoad, onError, onStats
 
 // ---- helpers ----
 
-async function loadSource(src: string | File): Promise<ArrayBuffer> {
-  if (src instanceof File) {
-    return src.arrayBuffer();
+async function loadSplatData(src: string | File): Promise<SplatData> {
+  // SOG format (meta.json URL)
+  if (typeof src === 'string' && isSogFile(src)) {
+    return loadSog(src);
   }
-  const resp = await fetch(src);
-  if (!resp.ok) throw new Error(`Failed to fetch ${src}: ${resp.status}`);
-  return resp.arrayBuffer();
-}
 
-function parseSplatData(buffer: ArrayBuffer): SplatData {
+  // PLY format (URL or File)
+  let buffer: ArrayBuffer;
+  if (src instanceof File) {
+    buffer = await src.arrayBuffer();
+  } else {
+    const resp = await fetch(src);
+    if (!resp.ok) throw new Error(`Failed to fetch ${src}: ${resp.status}`);
+    buffer = await resp.arrayBuffer();
+  }
+
   const ply = parsePlyHeader(buffer);
-
   if (isCompressedPly(ply)) {
     return loadCompressedPly(buffer, ply);
   }

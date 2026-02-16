@@ -1,7 +1,7 @@
 // ============================================================
 // Preprocess compute shader
-// Per-splat: project 3D Gaussian to 2D, compute conic in NDC
-// space directly (no pixel↔NDC conversion needed), emit sort keys.
+// Per-splat: project 3D Gaussian to 2D, compute conic in NDC,
+// evaluate SH bands 0-3 for view-dependent color, emit sort keys.
 // ============================================================
 
 struct Uniforms {
@@ -9,7 +9,8 @@ struct Uniforms {
   proj:       mat4x4<f32>,
   viewport:   vec2<f32>,
   numSplats:  u32,
-  _pad:       u32,
+  hasSH:      u32,
+  cameraPos:  vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -17,17 +18,27 @@ struct Uniforms {
 @group(0) @binding(2) var<storage, read> rotations:  array<f32>;
 @group(0) @binding(3) var<storage, read> scales_in:  array<f32>;
 @group(0) @binding(4) var<storage, read> colors_in:  array<f32>;
+@group(0) @binding(5) var<storage, read> shCoeffs:   array<f32>;  // N*45
 
 // Output: 12 floats per splat
-//   [0-1]:  center_ndc.xy
-//   [2-3]:  extent_ndc.xy  (bounding quad half-size)
-//   [4-6]:  conic_ndc (a, b, d) — inverse 2D cov in NDC
-//   [7-9]:  color.rgb
-//   [10]:   opacity
-//   [11]:   depth
-@group(0) @binding(5) var<storage, read_write> splatOut: array<f32>;
-@group(0) @binding(6) var<storage, read_write> sortKeys:   array<u32>;
-@group(0) @binding(7) var<storage, read_write> sortValues: array<u32>;
+@group(0) @binding(6) var<storage, read_write> splatOut: array<f32>;
+@group(0) @binding(7) var<storage, read_write> sortKeys:   array<u32>;
+@group(0) @binding(8) var<storage, read_write> sortValues: array<u32>;
+
+// SH constants — signs match PlayCanvas (see gsplatEvalSH.js)
+const SH_C1: f32 = 0.4886025119029199;
+const SH_C2_0: f32 =  1.0925484305920792;
+const SH_C2_1: f32 = -1.0925484305920792;
+const SH_C2_2: f32 =  0.31539156525252005;
+const SH_C2_3: f32 = -1.0925484305920792;
+const SH_C2_4: f32 =  0.5462742152960396;
+const SH_C3_0: f32 = -0.5900435899266435;
+const SH_C3_1: f32 =  2.890611442640554;
+const SH_C3_2: f32 = -0.4570457994644658;
+const SH_C3_3: f32 =  0.3731763325901154;
+const SH_C3_4: f32 = -0.4570457994644658;
+const SH_C3_5: f32 =  1.445305721320277;
+const SH_C3_6: f32 = -0.5900435899266435;
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -43,7 +54,59 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let sx = scales_in[idx*3u];
   let sy = scales_in[idx*3u+1u];
   let sz = scales_in[idx*3u+2u];
-  let col = vec4<f32>(colors_in[idx*4u], colors_in[idx*4u+1u], colors_in[idx*4u+2u], colors_in[idx*4u+3u]);
+  var col = vec4<f32>(colors_in[idx*4u], colors_in[idx*4u+1u], colors_in[idx*4u+2u], colors_in[idx*4u+3u]);
+
+  // ---- Evaluate SH for view-dependent color ----
+  if (u.hasSH != 0u) {
+    let dir = normalize(pos - u.cameraPos.xyz);
+    let x = dir.x;
+    let y = dir.y;
+    let z = dir.z;
+
+    let base = idx * 45u;
+
+    // SH evaluation — matches PlayCanvas gsplatEvalSH.js exactly
+    let xx = x * x; let yy = y * y; let zz = z * z;
+    let xy = x * y; let yz = y * z; let xz = x * z;
+
+    // Precompute basis function values for all 15 coefficients
+    var basis: array<f32, 15>;
+    // Band 1 (3)
+    basis[0]  = SH_C1 * (-y);
+    basis[1]  = SH_C1 * z;
+    basis[2]  = SH_C1 * (-x);
+    // Band 2 (5)
+    basis[3]  = SH_C2_0 * xy;
+    basis[4]  = SH_C2_1 * yz;
+    basis[5]  = SH_C2_2 * (2.0 * zz - xx - yy);
+    basis[6]  = SH_C2_3 * xz;
+    basis[7]  = SH_C2_4 * (xx - yy);
+    // Band 3 (7)
+    basis[8]  = SH_C3_0 * y * (3.0 * xx - yy);
+    basis[9]  = SH_C3_1 * xy * z;
+    basis[10] = SH_C3_2 * y * (4.0 * zz - xx - yy);
+    basis[11] = SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy);
+    basis[12] = SH_C3_4 * x * (4.0 * zz - xx - yy);
+    basis[13] = SH_C3_5 * z * (xx - yy);
+    basis[14] = SH_C3_6 * x * (xx - 3.0 * yy);
+
+    // Accumulate SH contribution for each color channel
+    // Layout: shCoeffs[base + ch*15 + k] where ch=0(R),1(G),2(B), k=0..14
+    for (var ch = 0u; ch < 3u; ch++) {
+      let o = base + ch * 15u;
+      var contrib = 0.0;
+      for (var k = 0u; k < 15u; k++) {
+        contrib += shCoeffs[o + k] * basis[k];
+      }
+      // Add directly — no SH_C0 multiplier (matches PlayCanvas)
+      if (ch == 0u) { col.x += contrib; }
+      else if (ch == 1u) { col.y += contrib; }
+      else { col.z += contrib; }
+    }
+
+    // Clamp color
+    col = vec4<f32>(clamp(col.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), col.a);
+  }
 
   // ---- Camera transform ----
   let cam = u.view * vec4<f32>(pos, 1.0);
@@ -58,13 +121,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let rc1 = vec3<f32>(2.0*(xy-wz), 1.0-2.0*(xx+zz), 2.0*(yz+wx));
   let rc2 = vec3<f32>(2.0*(xz+wy), 2.0*(yz-wx), 1.0-2.0*(xx+yy));
 
-  // M = R * S  (columns of R scaled by sx, sy, sz)
-  let m0 = rc0 * sx;  // column 0
-  let m1 = rc1 * sy;  // column 1
-  let m2 = rc2 * sz;  // column 2
+  let m0 = rc0 * sx;
+  let m1 = rc1 * sy;
+  let m2 = rc2 * sz;
 
-  // 3D covariance Σ = M * M^T (NOT M^T * M!)
-  // (M*M^T)[i][j] = row_i(M) · row_j(M) = m0[i]*m0[j] + m1[i]*m1[j] + m2[i]*m2[j]
   let row0 = vec3<f32>(m0.x, m1.x, m2.x);
   let row1 = vec3<f32>(m0.y, m1.y, m2.y);
   let row2 = vec3<f32>(m0.z, m1.z, m2.z);
@@ -72,22 +132,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let s00 = dot(row0,row0); let s01 = dot(row0,row1); let s02 = dot(row0,row2);
   let s11 = dot(row1,row1); let s12 = dot(row1,row2); let s22 = dot(row2,row2);
 
-  // ---- NDC Jacobian: directly maps world perturbation → NDC ----
-  // ndc.x = proj[0][0] * cam.x / (-cam.z)
-  // ndc.y = proj[1][1] * cam.y / (-cam.z)   (proj[1][1] = -f, already handles y-flip)
-  //
-  // J_ndc = [[-P00/z, 0,     P00*x/z²],
-  //          [0,      -P11/z, P11*y/z²]]
-  //
-  // T = J_ndc * W   where W = upper-left 3x3 of view matrix
+  // ---- NDC Jacobian ----
+  let W0 = vec3<f32>(u.view[0][0], u.view[1][0], u.view[2][0]);
+  let W1 = vec3<f32>(u.view[0][1], u.view[1][1], u.view[2][1]);
+  let W2 = vec3<f32>(u.view[0][2], u.view[1][2], u.view[2][2]);
 
-  let W0 = vec3<f32>(u.view[0][0], u.view[1][0], u.view[2][0]); // row 0
-  let W1 = vec3<f32>(u.view[0][1], u.view[1][1], u.view[2][1]); // row 1
-  let W2 = vec3<f32>(u.view[0][2], u.view[1][2], u.view[2][2]); // row 2
-
-  let P00 = u.proj[0][0];  // f / aspect  (positive)
-  let P11 = u.proj[1][1];  // -f          (negative, y-flip)
-  let tz = cam.z;           // negative for visible
+  let P00 = u.proj[0][0];
+  let P11 = u.proj[1][1];
+  let tz = cam.z;
   let tz2 = tz * tz;
 
   let j00 = -P00 / tz;
@@ -95,11 +147,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let j11 = -P11 / tz;
   let j12 =  P11 * cam.y / tz2;
 
-  // T rows (2x3): T0 maps world→NDC_x, T1 maps world→NDC_y
   let T0 = j00 * W0 + j02 * W2;
   let T1 = j11 * W1 + j12 * W2;
 
-  // ---- 2D covariance in NDC: Σ_ndc = T * Σ_3d * T^T ----
+  // ---- 2D covariance in NDC ----
   let v00 = s00*T0.x + s01*T0.y + s02*T0.z;
   let v01 = s00*T1.x + s01*T1.y + s02*T1.z;
   let v10 = s01*T0.x + s11*T0.y + s12*T0.z;
@@ -111,12 +162,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var cov_b = T0.x*v01 + T0.y*v11 + T0.z*v21;
   var cov_d = T1.x*v01 + T1.y*v11 + T1.z*v21;
 
-  // Low-pass filter (regularize ~0.3px equivalent in NDC)
   let reg = vec2<f32>(0.3 * 2.0 / u.viewport.x, 0.3 * 2.0 / u.viewport.y);
   cov_a += reg.x * reg.x;
   cov_d += reg.y * reg.y;
 
-  // ---- Conic (inverse of 2D cov) in NDC ----
   let det = cov_a * cov_d - cov_b * cov_b;
   if (det <= 0.0) { writeInvisible(idx); return; }
   let inv_det = 1.0 / det;
@@ -124,13 +173,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let cn_b = -cov_b * inv_det;
   let cn_d =  cov_a * inv_det;
 
-  // ---- Bounding box (3σ) directly in NDC ----
   let ext_x = 3.0 * sqrt(cov_a);
   let ext_y = 3.0 * sqrt(cov_d);
 
   if (ext_x < 1e-6 && ext_y < 1e-6) { writeInvisible(idx); return; }
 
-  // ---- NDC center ----
   let clip = u.proj * cam;
   let ndc = clip.xy / clip.w;
 

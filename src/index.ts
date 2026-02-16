@@ -6,6 +6,7 @@ export { Camera } from './core/Camera';
 export { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 export { loadCompressedPly } from './loaders/compressed-ply-loader';
 export { loadStandardPly } from './loaders/standard-ply-loader';
+export { loadSog, loadSogFromFiles, isSogFile } from './loaders/sog-loader';
 
 export type {
   SplatData,
@@ -18,14 +19,28 @@ export type {
   PlyProperty,
 } from './types';
 
+export type { SogMeta } from './loaders/sog-loader';
+
 // Local imports for the convenience loader
 import { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
+import { loadSog, isSogFile } from './loaders/sog-loader';
 import type { SplatData } from './types';
 
-/** Convenience loader that auto-detects compressed vs standard PLY format. */
-export async function loadPly(source: string | File): Promise<SplatData> {
+/**
+ * Convenience loader that auto-detects format:
+ * - SOG (meta.json URL) → fetches webp textures and decompresses
+ * - Compressed PLY → decompresses packed data
+ * - Standard PLY → reads float properties
+ */
+export async function loadSplat(source: string | File): Promise<SplatData> {
+  // SOG: URL pointing to meta.json
+  if (typeof source === 'string' && isSogFile(source)) {
+    return loadSog(source);
+  }
+
+  // PLY (from URL or File)
   let buffer: ArrayBuffer;
   if (source instanceof File) {
     buffer = await source.arrayBuffer();
@@ -42,3 +57,6 @@ export async function loadPly(source: string | File): Promise<SplatData> {
   }
   return loadStandardPly(buffer, ply);
 }
+
+/** @deprecated Use loadSplat instead */
+export const loadPly = loadSplat;

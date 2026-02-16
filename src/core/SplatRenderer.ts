@@ -30,6 +30,10 @@ export class SplatRenderer {
   private rotationBuf!: GPUBuffer;
   private scaleBuf!: GPUBuffer;
   private colorBuf!: GPUBuffer;
+  private shCoeffsBuf!: GPUBuffer;
+  /** Set to false to disable SH bands 1-3 (view-dependent color). */
+  shEnabled = true;
+  private hasSH = false;
 
   private splatOutBuf!: GPUBuffer;
   private preprocessUniformBuf!: GPUBuffer;
@@ -78,8 +82,9 @@ export class SplatRenderer {
       primitive: { topology: 'triangle-list', cullMode: 'none' },
     });
 
+    // Uniform: 2*mat4(128) + vec2(8) + u32(4) + u32(4) + vec4(16) = 160 bytes
     this.preprocessUniformBuf = device.createBuffer({
-      size: 144,
+      size: 160,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -98,12 +103,19 @@ export class SplatRenderer {
     this.rotationBuf?.destroy();
     this.scaleBuf?.destroy();
     this.colorBuf?.destroy();
+    this.shCoeffsBuf?.destroy();
     this.splatOutBuf?.destroy();
 
     this.positionBuf = this.createStorageBuffer(new Float32Array(data.positions));
     this.rotationBuf = this.createStorageBuffer(new Float32Array(data.rotations));
     this.scaleBuf = this.createStorageBuffer(new Float32Array(data.scales));
     this.colorBuf = this.createStorageBuffer(new Float32Array(data.colors));
+
+    // SH coefficients (bands 1-3), or a dummy 1-element buffer if absent
+    this.hasSH = !!data.shCoeffs;
+    this.shCoeffsBuf = this.createStorageBuffer(
+      data.shCoeffs ?? new Float32Array(45),
+    );
 
     this.splatOutBuf = device.createBuffer({
       size: data.count * SPLAT_FLOATS * 4,
@@ -154,16 +166,21 @@ export class SplatRenderer {
       this.sorter.viewMatrix = this.camera.viewMatrix;
     }
 
-    // Update preprocess uniforms
-    const uniformData = new ArrayBuffer(144);
+    // Update preprocess uniforms (160 bytes)
+    const uniformData = new ArrayBuffer(160);
     const f32 = new Float32Array(uniformData);
     const u32 = new Uint32Array(uniformData);
-    f32.set(this.camera.viewMatrix, 0);
-    f32.set(this.camera.projMatrix, 16);
-    f32[32] = this.gpu.canvas.width;
-    f32[33] = this.gpu.canvas.height;
-    u32[34] = this.numSplats;
-    u32[35] = 0;
+    f32.set(this.camera.viewMatrix, 0);       // offset 0:   view (64 bytes)
+    f32.set(this.camera.projMatrix, 16);      // offset 64:  proj (64 bytes)
+    f32[32] = this.gpu.canvas.width;          // offset 128: viewport.x
+    f32[33] = this.gpu.canvas.height;         // offset 132: viewport.y
+    u32[34] = this.numSplats;                 // offset 136: numSplats
+    u32[35] = (this.hasSH && this.shEnabled) ? 1 : 0; // offset 140: hasSH
+    const camPos = this.camera.position;
+    f32[36] = camPos[0];                      // offset 144: cameraPos.x
+    f32[37] = camPos[1];                      // offset 148: cameraPos.y
+    f32[38] = camPos[2];                      // offset 152: cameraPos.z
+    f32[39] = 0;                              // offset 156: padding
     device.queue.writeBuffer(this.preprocessUniformBuf, 0, uniformData);
 
     const encoder = device.createCommandEncoder();
@@ -178,9 +195,10 @@ export class SplatRenderer {
         { binding: 2, resource: { buffer: this.rotationBuf } },
         { binding: 3, resource: { buffer: this.scaleBuf } },
         { binding: 4, resource: { buffer: this.colorBuf } },
-        { binding: 5, resource: { buffer: this.splatOutBuf } },
-        { binding: 6, resource: { buffer: sortInputs.keys } },
-        { binding: 7, resource: { buffer: sortInputs.values } },
+        { binding: 5, resource: { buffer: this.shCoeffsBuf } },
+        { binding: 6, resource: { buffer: this.splatOutBuf } },
+        { binding: 7, resource: { buffer: sortInputs.keys } },
+        { binding: 8, resource: { buffer: sortInputs.values } },
       ],
     });
 
@@ -226,6 +244,7 @@ export class SplatRenderer {
     this.rotationBuf?.destroy();
     this.scaleBuf?.destroy();
     this.colorBuf?.destroy();
+    this.shCoeffsBuf?.destroy();
     this.splatOutBuf?.destroy();
     this.preprocessUniformBuf?.destroy();
     this.sorter?.destroy();

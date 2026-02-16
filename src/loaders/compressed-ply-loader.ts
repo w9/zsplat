@@ -1,4 +1,4 @@
-import type { PlyFile, SplatData } from '../types';
+import type { PlyFile, PlyElement, SplatData } from '../types';
 import { readTypedValue } from './ply-parser';
 
 /**
@@ -9,6 +9,7 @@ import { readTypedValue } from './ply-parser';
 export function loadCompressedPly(buffer: ArrayBuffer, ply: PlyFile): SplatData {
   const chunkEl = ply.elements.find((e) => e.name === 'chunk')!;
   const vertexEl = ply.elements.find((e) => e.name === 'vertex')!;
+  const shEl = ply.elements.find((e) => e.name === 'sh');
   const count = vertexEl.count;
   const numChunks = chunkEl.count;
 
@@ -17,6 +18,9 @@ export function loadCompressedPly(buffer: ArrayBuffer, ply: PlyFile): SplatData 
 
   // ---- read vertex packed data ----
   const vertexArrays = readVertexData(buffer, ply, vertexEl);
+
+  // ---- read SH data (optional) ----
+  const shRaw = shEl ? readShData(buffer, ply, shEl) : null;
 
   // ---- decompress ----
   const positions = new Float32Array(count * 3);
@@ -65,14 +69,13 @@ export function loadCompressedPly(buffer: ArrayBuffer, ply: PlyFile): SplatData 
       colors[i * 4 + 1] = lerp(chunkArrays.min_g![ci], chunkArrays.max_g![ci], cc[1]);
       colors[i * 4 + 2] = lerp(chunkArrays.min_b![ci], chunkArrays.max_b![ci], cc[2]);
     } else {
-      // Original format: color is SH DC coefficient
-      const SH_C0 = 0.28209479177387814;
-      colors[i * 4] = 0.5 + SH_C0 * cc[0]; // was (cc - 0.5)/SH_C0 to get SH, we want linear color
-      colors[i * 4 + 1] = 0.5 + SH_C0 * cc[1];
-      colors[i * 4 + 2] = 0.5 + SH_C0 * cc[2];
+      // Original format: unpack8888 gives [0,1] values that ARE the color directly
+      colors[i * 4] = cc[0];
+      colors[i * 4 + 1] = cc[1];
+      colors[i * 4 + 2] = cc[2];
     }
-    // Alpha: sigmoid of packed alpha (or direct if color bounds present)
-    colors[i * 4 + 3] = hasColorBounds ? cc[3] : cc[3];
+    // Alpha: direct [0,1] from unpack8888
+    colors[i * 4 + 3] = cc[3];
 
     // Update bounds
     boundsMin[0] = Math.min(boundsMin[0], px);
@@ -83,7 +86,33 @@ export function loadCompressedPly(buffer: ArrayBuffer, ply: PlyFile): SplatData 
     boundsMax[2] = Math.max(boundsMax[2], pz);
   }
 
-  return { count, positions, rotations, scales, colors, bounds: { min: boundsMin, max: boundsMax } };
+  // ---- Dequantize SH rest coefficients (bands 1-3) ----
+  let shCoeffs: Float32Array | undefined;
+  if (shRaw) {
+    const numProps = shEl!.properties.length;
+    const srcCoeffs = Math.floor(numProps / 3); // coefficients per channel (3, 8, or 15)
+    shCoeffs = new Float32Array(count * 45);
+
+    for (let i = 0; i < count; i++) {
+      for (let ch = 0; ch < 3; ch++) {
+        for (let k = 0; k < 15; k++) {
+          if (k < srcCoeffs) {
+            // File layout: interleaved [ch0_k0, ch1_k0, ch2_k0, ch0_k1, ...]
+            // = per splat: srcCoeffs * 3 bytes, ordered as [R0,R1..R(n-1), G0,G1..G(n-1), B0,B1..B(n-1)]
+            // Actually from the PLY: f_rest_0..f_rest_44 are ordered as all 45 sequential bytes
+            // The PlayCanvas parser reads them as: tmpBuf[(j * 3 + ch) * srcCoeffs + k]
+            // This means the file order is: [R_coeff0, R_coeff1, ..., R_coeff(n-1), G_coeff0, ..., B_coeff(n-1)]
+            const srcIdx = i * numProps + ch * srcCoeffs + k;
+            const val = shRaw[srcIdx];
+            shCoeffs[i * 45 + ch * 15 + k] = val * (8 / 255) - 4;
+          }
+          // else: remains 0 (already zeroed by Float32Array)
+        }
+      }
+    }
+  }
+
+  return { count, positions, rotations, scales, colors, shCoeffs, bounds: { min: boundsMin, max: boundsMax } };
 }
 
 // ---- chunk data reader ----
@@ -187,6 +216,34 @@ function readVertexData(buffer: ArrayBuffer, ply: PlyFile, vertexEl: typeof ply.
   }
 
   return { packed_position, packed_rotation, packed_scale, packed_color };
+}
+
+// ---- SH data reader ----
+
+function readShData(buffer: ArrayBuffer, ply: PlyFile, shEl: PlyElement): Uint8Array {
+  const view = new DataView(buffer);
+  let offset = ply.headerByteLength;
+
+  // Skip elements before sh
+  for (const el of ply.elements) {
+    if (el.name === 'sh') break;
+    let stride = 0;
+    for (const p of el.properties) stride += p.byteSize;
+    offset += stride * el.count;
+  }
+
+  const n = shEl.count;
+  const numProps = shEl.properties.length;
+  const result = new Uint8Array(n * numProps);
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < numProps; j++) {
+      result[i * numProps + j] = view.getUint8(offset);
+      offset += 1;
+    }
+  }
+
+  return result;
 }
 
 // ---- bit unpacking ----
