@@ -45,7 +45,7 @@ export function ZSplat({ src, style, className, camera, onLoad, onError, onStats
           far: camera?.far,
         });
 
-        const renderer = new SplatRenderer(cam);
+        const renderer = new SplatRenderer({ camera: cam, sort: 'gpu' });
         rendererRef.current = renderer;
 
         // Size the canvas to CSS layout dimensions

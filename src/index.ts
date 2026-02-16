@@ -1,6 +1,7 @@
 // Public API
 export { ZSplat } from './ZSplat';
 export { SplatRenderer } from './core/SplatRenderer';
+export type { SortMethod } from './core/SplatRenderer';
 export { Camera } from './core/Camera';
 export { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 export { loadCompressedPly } from './loaders/compressed-ply-loader';

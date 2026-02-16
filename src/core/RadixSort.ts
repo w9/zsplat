@@ -1,3 +1,4 @@
+import type { Sorter } from './Sorter';
 import radixSortWGSL from '../shaders/radixSort.wgsl?raw';
 
 const WG_SIZE = 256;
@@ -10,7 +11,7 @@ const NUM_PASSES = 4;
  * GPU Radix Sort using WebGPU compute shaders.
  * Sorts uint32 key-value pairs in 4 passes of 8 bits each.
  */
-export class RadixSort {
+export class RadixSort implements Sorter {
   private device: GPUDevice;
   private histogramPipeline!: GPUComputePipeline;
   private prefixSumPipeline!: GPUComputePipeline;
@@ -90,6 +91,12 @@ export class RadixSort {
 
   getInputBuffers(): { keys: GPUBuffer; values: GPUBuffer } {
     return { keys: this.keysA, values: this.valsA };
+  }
+
+  /** After sort(), returns the buffer containing sorted keys (same side as sorted values). */
+  getSortedKeysBuffer(): GPUBuffer {
+    // After 4 passes (even), result is back in keysA
+    return this.keysA;
   }
 
   /**

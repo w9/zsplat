@@ -270,7 +270,7 @@ export class Camera {
       this.dirty = true;
     } else if (e.buttons & 1) {
       // Left-click: orbit
-      this.vTheta -= dx * sens;
+      this.vTheta += dx * sens;
       this.vPhi += dy * sens;
       this.dirty = true;
     }
@@ -331,7 +331,7 @@ function perspective(
   far: number,
 ): void {
   const f = 1.0 / Math.tan(fovy / 2);
-  out[0] = f / aspect;
+  out[0] = -f / aspect; // negate x — match PLY data convention
   out[1] = 0; out[2] = 0; out[3] = 0;
   out[4] = 0;
   out[5] = -f; // negate y — WebGPU framebuffer y is top-down

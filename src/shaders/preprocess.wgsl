@@ -58,12 +58,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let rc1 = vec3<f32>(2.0*(xy-wz), 1.0-2.0*(xx+zz), 2.0*(yz+wx));
   let rc2 = vec3<f32>(2.0*(xz+wy), 2.0*(yz-wx), 1.0-2.0*(xx+yy));
 
-  let m0 = rc0 * sx;
-  let m1 = rc1 * sy;
-  let m2 = rc2 * sz;
+  // M = R * S  (columns of R scaled by sx, sy, sz)
+  let m0 = rc0 * sx;  // column 0
+  let m1 = rc1 * sy;  // column 1
+  let m2 = rc2 * sz;  // column 2
 
-  let s00 = dot(m0,m0); let s01 = dot(m0,m1); let s02 = dot(m0,m2);
-  let s11 = dot(m1,m1); let s12 = dot(m1,m2); let s22 = dot(m2,m2);
+  // 3D covariance Σ = M * M^T (NOT M^T * M!)
+  // (M*M^T)[i][j] = row_i(M) · row_j(M) = m0[i]*m0[j] + m1[i]*m1[j] + m2[i]*m2[j]
+  let row0 = vec3<f32>(m0.x, m1.x, m2.x);
+  let row1 = vec3<f32>(m0.y, m1.y, m2.y);
+  let row2 = vec3<f32>(m0.z, m1.z, m2.z);
+
+  let s00 = dot(row0,row0); let s01 = dot(row0,row1); let s02 = dot(row0,row2);
+  let s11 = dot(row1,row1); let s12 = dot(row1,row2); let s22 = dot(row2,row2);
 
   // ---- NDC Jacobian: directly maps world perturbation → NDC ----
   // ndc.x = proj[0][0] * cam.x / (-cam.z)
