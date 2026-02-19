@@ -16,6 +16,9 @@ export class Camera {
   private vPanX = 0;
   private vPanY = 0;
 
+  /** Radians per frame for automatic orbit (turntable). 0 = off. */
+  turntableSpeed = 0;
+
   private fov: number;   // vertical FOV in degrees
   private near: number;
   private far: number;
@@ -95,6 +98,10 @@ export class Camera {
     const threshold = 1e-5;
 
     this.theta += this.vTheta;
+    if (this.turntableSpeed !== 0) {
+      this.theta += this.turntableSpeed;
+      this.dirty = true;
+    }
     this.phi += this.vPhi;
     this.radius += this.vRadius;
 

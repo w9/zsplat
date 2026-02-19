@@ -33,6 +33,8 @@ export class SplatRenderer {
   private shCoeffsBuf!: GPUBuffer;
   /** Set to false to disable SH bands 1-3 (view-dependent color). */
   shEnabled = true;
+  /** Radians per frame for turntable auto-rotate. 0 = off. */
+  turntableSpeed = 0;
   private hasSH = false;
 
   private splatOutBuf!: GPUBuffer;
@@ -159,6 +161,7 @@ export class SplatRenderer {
     if (this.numSplats === 0) return;
 
     const device = this.gpu.device;
+    this.camera.turntableSpeed = this.turntableSpeed;
     this.camera.update();
 
     // Feed CPU sort with current view matrix

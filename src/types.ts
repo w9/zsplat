@@ -66,6 +66,8 @@ export interface ZSplatProps {
   camera?: Partial<CameraState>;
   /** Enable SH bands 1-3 for view-dependent color. Default true. */
   shEnabled?: boolean;
+  /** Auto-rotate camera around target (turntable mode). Default false. */
+  turntable?: boolean;
   onLoad?: (info: { numSplats: number }) => void;
   onError?: (err: Error) => void;
   onStats?: (stats: SplatStats) => void;
