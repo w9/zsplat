@@ -2,6 +2,33 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { ZSplat } from 'zsplat';
 import type { SplatStats } from 'zsplat';
 
+const FPS_SAMPLES_CAP = 2000;
+
+type RunningStats = { avg: number; min: number; max: number; p5: number; p25: number; p50: number; p75: number; p95: number };
+
+function computeRunningStats(samples: number[]): RunningStats | null {
+  if (samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const n = sorted.length;
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const lerp = (arr: number[], t: number) => {
+    const i = Math.max(0, Math.min(n - 1, t * (n - 1)));
+    const lo = Math.floor(i);
+    const hi = Math.ceil(i);
+    return lo === hi ? arr[lo] : arr[lo] + (i - lo) * (arr[hi] - arr[lo]);
+  };
+  return {
+    avg: sum / n,
+    min: sorted[0],
+    max: sorted[n - 1],
+    p5: lerp(sorted, 0.05),
+    p25: lerp(sorted, 0.25),
+    p50: lerp(sorted, 0.5),
+    p75: lerp(sorted, 0.75),
+    p95: lerp(sorted, 0.95),
+  };
+}
+
 export function App() {
   const [src, setSrc] = useState<string | File | null>(null);
   const [stats, setStats] = useState<SplatStats | null>(null);
@@ -10,12 +37,17 @@ export function App() {
   const [dragging, setDragging] = useState(false);
   const [shEnabled, setShEnabled] = useState(true);
   const [turntable, setTurntable] = useState(false);
+  const [showExtraStats, setShowExtraStats] = useState(false);
+  const [runningStats, setRunningStats] = useState<RunningStats | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fpsSamplesRef = useRef<number[]>([]);
 
   const handleFile = useCallback((file: File) => {
     setError(null);
     setLoading(true);
     setStats(null);
+    setRunningStats(null);
+    fpsSamplesRef.current = [];
     setSrc(file);
   }, []);
 
@@ -33,6 +65,11 @@ export function App() {
 
   const handleStats = useCallback((s: SplatStats) => {
     setStats(s);
+    if (s.fps > 0) {
+      const buf = fpsSamplesRef.current;
+      buf.push(s.fps);
+      if (buf.length > FPS_SAMPLES_CAP) buf.shift();
+    }
   }, []);
 
   const openFilePicker = useCallback(() => {
@@ -65,6 +102,19 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!showExtraStats) return;
+    const tick = () => setRunningStats(computeRunningStats(fpsSamplesRef.current));
+    tick();
+    const interval = setInterval(tick, 500);
+    return () => clearInterval(interval);
+  }, [showExtraStats]);
+
+  const handleResetRunningStats = useCallback(() => {
+    fpsSamplesRef.current = [];
+    setRunningStats(null);
   }, []);
 
   const fileInput = (
@@ -114,11 +164,28 @@ export function App() {
           </button>}
         </div>
         {stats && (
-          <div style={{ display: 'flex', gap: 16, fontSize: 12, opacity: 0.8 }}>
-            <span>{fmt(stats.numSplats)} splats</span>
-            <span>{stats.fps} fps</span>
-            {stats.loadTimeMs > 0 && <span>{Math.round(stats.loadTimeMs)} ms load</span>}
-            {stats.gpuMemoryBytes > 0 && <span>{fmtB(stats.gpuMemoryBytes)} GPU</span>}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, opacity: 0.8 }}>
+                <span>{fmt(stats.numSplats)} splats</span>
+                <span>{stats.fps} fps</span>
+                {stats.loadTimeMs > 0 && <span>{Math.round(stats.loadTimeMs)} ms load</span>}
+                {stats.gpuMemoryBytes > 0 && <span>{fmtB(stats.gpuMemoryBytes)} GPU</span>}
+              </div>
+              <button style={buttonStyle} onClick={() => setShowExtraStats((v) => !v)}>
+                {showExtraStats ? 'Less' : 'More'}
+              </button>
+              {showExtraStats && (
+                <button style={buttonStyle} onClick={handleResetRunningStats}>Reset</button>
+              )}
+            </div>
+            {showExtraStats && (
+              <div style={{ fontSize: 12, opacity: 0.8 }}>
+                {runningStats
+                  ? `FPS: avg ${Math.round(runningStats.avg)} · min ${Math.round(runningStats.min)} · max ${Math.round(runningStats.max)} · p5 ${Math.round(runningStats.p5)} · p25 ${Math.round(runningStats.p25)} · p50 ${Math.round(runningStats.p50)} · p75 ${Math.round(runningStats.p75)} · p95 ${Math.round(runningStats.p95)}`
+                  : 'No samples yet'}
+              </div>
+            )}
           </div>
         )}
       </div>
