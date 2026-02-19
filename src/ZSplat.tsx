@@ -6,6 +6,7 @@ import { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
 import { loadSog, isSogFile } from './loaders/sog-loader';
+import { loadSpz, isSpzFile } from './loaders/spz-loader';
 
 /**
  * React component that renders 3D Gaussian Splats via WebGPU.
@@ -146,7 +147,6 @@ async function loadSplatData(src: string | File): Promise<SplatData> {
     return loadSog(src);
   }
 
-  // PLY format (URL or File)
   let buffer: ArrayBuffer;
   if (src instanceof File) {
     buffer = await src.arrayBuffer();
@@ -154,6 +154,11 @@ async function loadSplatData(src: string | File): Promise<SplatData> {
     const resp = await fetch(src);
     if (!resp.ok) throw new Error(`Failed to fetch ${src}: ${resp.status}`);
     buffer = await resp.arrayBuffer();
+  }
+
+  const name = src instanceof File ? src.name : src;
+  if (isSpzFile(name)) {
+    return loadSpz(buffer);
   }
 
   const ply = parsePlyHeader(buffer);

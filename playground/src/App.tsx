@@ -52,7 +52,8 @@ export function App() {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.ply')) handleFile(file);
+    const name = file?.name?.toLowerCase() ?? '';
+    if (file && (name.endsWith('.ply') || name.endsWith('.spz'))) handleFile(file);
   }, [handleFile]);
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export function App() {
   }, []);
 
   const fileInput = (
-    <input ref={fileInputRef} type="file" accept=".ply" style={{ display: 'none' }}
+    <input ref={fileInputRef} type="file" accept=".ply,.spz" style={{ display: 'none' }}
       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
   );
 
@@ -83,17 +84,17 @@ export function App() {
         <div style={welcomeStyle}>
           <div style={{ fontSize: 48, fontWeight: 800, letterSpacing: -2, marginBottom: 8 }}>ZSplat</div>
           <div style={{ fontSize: 14, opacity: 0.5, marginBottom: 32, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
-            WebGPU Gaussian Splat Renderer. Load any PLY file and explore millions of splats in real time.
+            WebGPU Gaussian Splat Renderer. Load PLY or SPZ files and explore millions of splats in real time.
           </div>
-          <button style={welcomeButtonStyle} onClick={openFilePicker}>Open a .ply file</button>
-          <div style={{ marginTop: 16, fontSize: 12, opacity: 0.3 }}>or drag and drop anywhere</div>
+          <button style={welcomeButtonStyle} onClick={openFilePicker}>Open PLY or SPZ</button>
+          <div style={{ marginTop: 16, fontSize: 12, opacity: 0.3 }}>or drag and drop .ply or .spz</div>
         </div>
       )}
 
       <div style={topBarStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: -0.5 }}>ZSplat</span>
-          <button style={buttonStyle} onClick={openFilePicker}>Open PLY</button>
+          <button style={buttonStyle} onClick={openFilePicker}>Open PLY/SPZ</button>
           <span style={{ fontSize: 11, opacity: 0.4 }}>Ctrl+O</span>
           {src && <button style={{
             ...buttonStyle,
@@ -128,7 +129,7 @@ export function App() {
         <div style={{ marginTop: 8, fontSize: 13, maxWidth: 400, textAlign: 'center', opacity: 0.8 }}>{error}</div>
         <button style={{ ...buttonStyle, marginTop: 16 }} onClick={() => { setError(null); setSrc(null); }}>Back</button>
       </div>}
-      {dragging && <div style={dragOverlayStyle}><div style={{ fontSize: 20, fontWeight: 600 }}>Drop .ply file here</div></div>}
+      {dragging && <div style={dragOverlayStyle}><div style={{ fontSize: 20, fontWeight: 600 }}>Drop .ply or .spz here</div></div>}
       {src && <div style={hintStyle}>Left drag: rotate · Right drag / Shift+drag: pan · Scroll: zoom</div>}
       <style>{`@keyframes zsplat-spin { to { transform: rotate(360deg); } }`}</style>
     </div>

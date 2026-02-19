@@ -7,6 +7,7 @@ export { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 export { loadCompressedPly } from './loaders/compressed-ply-loader';
 export { loadStandardPly } from './loaders/standard-ply-loader';
 export { loadSog, loadSogFromFiles, isSogFile } from './loaders/sog-loader';
+export { loadSpz, isSpzFile } from './loaders/spz-loader';
 
 export type {
   SplatData,
@@ -26,13 +27,17 @@ import { parsePlyHeader, isCompressedPly } from './loaders/ply-parser';
 import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
 import { loadSog, isSogFile } from './loaders/sog-loader';
+import { loadSpz, isSpzFile } from './loaders/spz-loader';
 import type { SplatData } from './types';
 
 /**
  * Convenience loader that auto-detects format:
  * - SOG (meta.json URL) → fetches webp textures and decompresses
+ * - SPZ (.spz URL or File) → gzip decompress and parse Niantic format
  * - Compressed PLY → decompresses packed data
  * - Standard PLY → reads float properties
+ *
+ * .ksplat (GaussianSplats3D) is not supported; format is not publicly specified.
  */
 export async function loadSplat(source: string | File): Promise<SplatData> {
   // SOG: URL pointing to meta.json
@@ -40,7 +45,6 @@ export async function loadSplat(source: string | File): Promise<SplatData> {
     return loadSog(source);
   }
 
-  // PLY (from URL or File)
   let buffer: ArrayBuffer;
   if (source instanceof File) {
     buffer = await source.arrayBuffer();
@@ -50,8 +54,12 @@ export async function loadSplat(source: string | File): Promise<SplatData> {
     buffer = await resp.arrayBuffer();
   }
 
-  const ply = parsePlyHeader(buffer);
+  const name = source instanceof File ? source.name : source;
+  if (isSpzFile(name)) {
+    return loadSpz(buffer);
+  }
 
+  const ply = parsePlyHeader(buffer);
   if (isCompressedPly(ply)) {
     return loadCompressedPly(buffer, ply);
   }
