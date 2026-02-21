@@ -3,7 +3,9 @@ import { ZSplat } from 'zsplat';
 import type { SplatStats } from 'zsplat';
 import type { OpenDetail } from './types';
 import { FPS_SAMPLES_CAP, computeRunningStats } from './utils/stats';
-import { LeftColumn } from './components/LeftColumn';
+import { TopBar } from './components/TopBar';
+import { BottomBar } from './components/BottomBar';
+import { DetailPanels } from './components/DetailPanels';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ErrorOverlay } from './components/ErrorOverlay';
@@ -149,7 +151,7 @@ export function App() {
 
   return (
     <div
-      className="w-full h-full flex flex-row overflow-hidden"
+      className="w-screen h-screen relative overflow-hidden"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -166,21 +168,7 @@ export function App() {
         }}
       />
 
-      <LeftColumn
-        src={src}
-        stats={stats}
-        openDetail={openDetail}
-        runningStats={runningStats}
-        setOpenDetail={setOpenDetail}
-        handleResetRunningStats={handleResetRunningStats}
-        openFilePicker={openFilePicker}
-        shEnabled={shEnabled}
-        setShEnabled={setShEnabled}
-        turntable={turntable}
-        setTurntable={setTurntable}
-      />
-
-      <div className="flex-1 min-w-0 relative flex flex-col">
+      <div className="absolute inset-0 w-full h-full">
         {src ? (
           <ZSplat
             src={src}
@@ -194,16 +182,33 @@ export function App() {
         ) : (
           <WelcomeScreen onOpen={openFilePicker} />
         )}
-
-        {loading && <LoadingOverlay />}
-        {error && <ErrorOverlay message={error} onBack={() => { setError(null); setSrc(null); }} />}
-        {dragging && <DragOverlay />}
-        {src && (
-          <div className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-muted-foreground pointer-events-none z-10">
-            Left drag: rotate · Right drag / Shift+drag: pan · Scroll: zoom
-          </div>
-        )}
       </div>
+
+      <TopBar
+        onOpen={openFilePicker}
+        hasScene={!!src}
+        shEnabled={shEnabled}
+        onShChange={setShEnabled}
+        turntable={turntable}
+        onTurntableChange={setTurntable}
+      />
+
+      <BottomBar
+        stats={stats}
+        openDetail={openDetail}
+        onOpenDetailChange={setOpenDetail}
+        hasScene={!!src}
+      />
+
+      <DetailPanels
+        openDetail={openDetail}
+        runningStats={runningStats}
+        onReset={handleResetRunningStats}
+      />
+
+      {loading && <LoadingOverlay />}
+      {error && <ErrorOverlay message={error} onBack={() => { setError(null); setSrc(null); }} />}
+      {dragging && <DragOverlay />}
     </div>
   );
 }

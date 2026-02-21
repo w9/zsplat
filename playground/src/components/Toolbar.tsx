@@ -17,7 +17,7 @@ export function Toolbar({
   onTurntableChange: (v: boolean) => void;
 }) {
   return (
-    <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 border-b border-border shrink-0">
+    <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 shrink-0">
       <span className="font-bold text-base tracking-tight">ZSplat</span>
       <Button
         type="button"

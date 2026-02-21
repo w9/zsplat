@@ -8,21 +8,24 @@ export function StatsPanel({
   stats,
   openDetail,
   onOpenDetailChange,
+  className,
 }: {
   stats: SplatStats | null;
   openDetail: OpenDetail;
   onOpenDetailChange: (v: OpenDetail) => void;
+  className?: string;
 }) {
+  const baseClass = 'p-2.5 px-4 border-t border-border shrink-0';
   if (!stats) {
     return (
-      <div className="p-2.5 px-4 border-t border-border shrink-0">
+      <div className={cn(baseClass, className)}>
         <span className="text-xs text-muted-foreground">No stats</span>
       </div>
     );
   }
   const fpsOpen = openDetail === 'fps';
   return (
-    <div className="p-2.5 px-4 border-t border-border shrink-0">
+    <div className={cn(baseClass, className)}>
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground/90">
         <span>{fmt(stats.numSplats)} splats</span>
         <Button
