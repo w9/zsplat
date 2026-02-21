@@ -7,6 +7,7 @@ export class WebGPUContext {
   context!: GPUCanvasContext;
   format!: GPUTextureFormat;
   canvas!: HTMLCanvasElement;
+  private destroyedByUs = false;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (!navigator.gpu) {
@@ -34,7 +35,9 @@ export class WebGPUContext {
     });
 
     device.lost.then((info) => {
-      console.error('WebGPU device lost:', info.message);
+      if (!this.destroyedByUs) {
+        console.error('WebGPU device lost:', info.message);
+      }
     });
 
     const context = canvas.getContext('webgpu');
@@ -65,6 +68,7 @@ export class WebGPUContext {
   }
 
   dispose(): void {
+    this.destroyedByUs = true;
     this.device?.destroy();
   }
 }

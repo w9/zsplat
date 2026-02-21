@@ -9,14 +9,55 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { ErrorOverlay } from './components/ErrorOverlay';
 import { DragOverlay } from './components/DragOverlay';
 
+type HmrSavedState = {
+  src: string | File | null;
+  stats: SplatStats | null;
+  shEnabled: boolean;
+  turntable: boolean;
+};
+
+const hmrState: HmrSavedState = {
+  src: null,
+  stats: null,
+  shEnabled: true,
+  turntable: false,
+};
+
+const HMR_DEBUG = import.meta.env.DEV && typeof window !== 'undefined';
+
+if (import.meta.hot) {
+  import.meta.hot.dispose((data: { savedState?: HmrSavedState }) => {
+    data.savedState = { ...hmrState };
+    if (HMR_DEBUG) {
+      console.log('[HMR] dispose: saving state', {
+        hasSrc: hmrState.src != null,
+        srcType: hmrState.src instanceof File ? 'File' : typeof hmrState.src,
+        shEnabled: hmrState.shEnabled,
+        turntable: hmrState.turntable,
+      });
+    }
+  });
+}
+
+function getSavedState(): HmrSavedState | undefined {
+  const saved = import.meta.hot?.data?.savedState as HmrSavedState | undefined;
+  if (HMR_DEBUG && saved) {
+    console.log('[HMR] getSavedState: restoring', {
+      hasSrc: saved.src != null,
+      srcType: saved.src instanceof File ? 'File' : typeof saved.src,
+    });
+  }
+  return saved;
+}
+
 export function App() {
-  const [src, setSrc] = useState<string | File | null>(null);
-  const [stats, setStats] = useState<SplatStats | null>(null);
+  const [src, setSrc] = useState<string | File | null>(() => getSavedState()?.src ?? null);
+  const [stats, setStats] = useState<SplatStats | null>(() => getSavedState()?.stats ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [shEnabled, setShEnabled] = useState(true);
-  const [turntable, setTurntable] = useState(false);
+  const [shEnabled, setShEnabled] = useState(() => getSavedState()?.shEnabled ?? true);
+  const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? false);
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +115,13 @@ export function App() {
     const name = file?.name?.toLowerCase() ?? '';
     if (file && (name.endsWith('.ply') || name.endsWith('.spz') || name.endsWith('.rad'))) handleFile(file);
   }, [handleFile]);
+
+  useEffect(() => {
+    hmrState.src = src;
+    hmrState.stats = stats;
+    hmrState.shEnabled = shEnabled;
+    hmrState.turntable = turntable;
+  }, [src, stats, shEnabled, turntable]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
