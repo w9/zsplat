@@ -202,8 +202,10 @@ export function App() {
 
       <DetailPanels
         openDetail={openDetail}
+        stats={stats}
         runningStats={runningStats}
         onReset={handleResetRunningStats}
+        onOpenDetailChange={setOpenDetail}
       />
 
       {loading && <LoadingOverlay />}

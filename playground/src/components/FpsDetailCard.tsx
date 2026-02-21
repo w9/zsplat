@@ -2,26 +2,111 @@ import type { RunningStats } from '../utils/stats';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+const FPS_ROW_CLASS = 'flex justify-between gap-4 text-xs leading-6 text-muted-foreground/90';
+
+const buttonClass =
+  'h-auto py-1 px-2.5 text-[12px] font-[inherit] bg-white/10 border-white/20 text-white hover:bg-white/15 dark:bg-white/10 dark:border-white/20 dark:text-white';
+
+function copyStatsToClipboard(runningStats: RunningStats | null): void {
+  if (!runningStats) return;
+  const payload = {
+    average: Math.round(runningStats.avg),
+    minimum: Math.round(runningStats.min),
+    maximum: Math.round(runningStats.max),
+    '5th_percentile': Math.round(runningStats.p5),
+    '25th_percentile': Math.round(runningStats.p25),
+    median: Math.round(runningStats.p50),
+    '75th_percentile': Math.round(runningStats.p75),
+    '95th_percentile': Math.round(runningStats.p95),
+  };
+  void navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+}
+
 export function FpsDetailCard({
+  currentFps,
   runningStats,
   onReset,
+  onClose,
 }: {
+  currentFps: number | null;
   runningStats: RunningStats | null;
   onReset: () => void;
+  onClose?: () => void;
 }) {
   return (
-    <Card className="bg-card/95 border-border shadow-lg gap-0 py-0">
-      <CardContent className="pt-4 pb-2 text-xs text-muted-foreground/90 leading-7">
-        {runningStats
-          ? `avg ${Math.round(runningStats.avg)} · min ${Math.round(runningStats.min)} · max ${Math.round(runningStats.max)} · p5 ${Math.round(runningStats.p5)} · p25 ${Math.round(runningStats.p25)} · p50 ${Math.round(runningStats.p50)} · p75 ${Math.round(runningStats.p75)} · p95 ${Math.round(runningStats.p95)}`
-          : 'No samples yet'}
+    <Card className="relative rounded-md bg-card/95 border-border shadow-md gap-0 py-0">
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-1.5 right-1.5 p-0.5 text-muted-foreground/70 hover:text-muted-foreground text-sm leading-none rounded cursor-pointer font-[inherit]"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      )}
+      <CardContent className="pt-2.5 pb-1.5 pl-3 pr-7 text-muted-foreground/90">
+        <div className="grid gap-0.5">
+          <div className={FPS_ROW_CLASS}>
+            <span>FPS</span>
+            <span className="tabular-nums">{currentFps != null ? currentFps : '—'}</span>
+          </div>
+          {runningStats ? (
+          <>
+            <div className={FPS_ROW_CLASS}>
+              <span>Average</span>
+              <span className="tabular-nums">{Math.round(runningStats.avg)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>Minimum</span>
+              <span className="tabular-nums">{Math.round(runningStats.min)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>Maximum</span>
+              <span className="tabular-nums">{Math.round(runningStats.max)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>5th percentile</span>
+              <span className="tabular-nums">{Math.round(runningStats.p5)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>25th percentile</span>
+              <span className="tabular-nums">{Math.round(runningStats.p25)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>Median</span>
+              <span className="tabular-nums">{Math.round(runningStats.p50)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>75th percentile</span>
+              <span className="tabular-nums">{Math.round(runningStats.p75)}</span>
+            </div>
+            <div className={FPS_ROW_CLASS}>
+              <span>95th percentile</span>
+              <span className="tabular-nums">{Math.round(runningStats.p95)}</span>
+            </div>
+          </>
+          ) : (
+          <p className="text-xs leading-6 pt-0.5">No samples yet</p>
+          )}
+        </div>
       </CardContent>
-      <CardFooter className="pt-0 pb-4">
+      <CardFooter className="pt-1 pb-2.5 pl-3 pr-7 flex flex-wrap gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-auto py-1.5 px-3.5 text-[13px] font-[inherit] bg-white/10 border-white/20 text-white hover:bg-white/15 dark:bg-white/10 dark:border-white/20 dark:text-white"
+          className={buttonClass}
+          onClick={() => copyStatsToClipboard(runningStats)}
+          disabled={!runningStats}
+        >
+          Copy
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={buttonClass}
           onClick={onReset}
         >
           Reset
