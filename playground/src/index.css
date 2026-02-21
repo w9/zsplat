@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --animate-zsplat-spin: zsplat-spin 0.8s linear infinite;
+  @keyframes zsplat-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
