@@ -1,4 +1,4 @@
-import type { SplatData } from '../types';
+import type { SplatData, SplatStats } from '../types';
 import type { Sorter } from './Sorter';
 import { WebGPUContext } from './WebGPUContext';
 import { RadixSort } from './RadixSort';
@@ -10,6 +10,8 @@ import renderWGSL from '../shaders/render.wgsl?raw';
 
 const PREPROCESS_WG_SIZE = 256;
 const SPLAT_FLOATS = 12;
+const PICK_READBACK_BYTES_PER_ROW = 256; // WebGPU requires bytesPerRow multiple of 256
+const PICK_NO_HIT = 0xffffffff;
 
 export type SortMethod = 'cpu' | 'gpu' | 'gpu-unstable';
 
@@ -23,6 +25,7 @@ export class SplatRenderer {
 
   private preprocessPipeline!: GPUComputePipeline;
   private renderPipeline!: GPURenderPipeline;
+  private pickPipeline!: GPURenderPipeline;
   private sorter!: Sorter;
   private sortMethod: SortMethod;
 
@@ -47,6 +50,17 @@ export class SplatRenderer {
   private frameId = 0;
   private running = false;
   private onFrame?: () => void;
+  /** Called when pick readback completes; merges into stats (e.g. hoveredSplatIndex). */
+  private onStatsPartial?: (partial: Partial<SplatStats>) => void;
+
+  private pickTexture: GPUTexture | null = null;
+  private pickTextureWidth = 0;
+  private pickTextureHeight = 0;
+  private readbackBuf!: GPUBuffer;
+  private readbackPending = false;
+  private pickX = -1;
+  private pickY = -1;
+  private onPointerMoveBound = this.handlePointerMove.bind(this);
 
   constructor(options?: { camera?: Camera; sort?: SortMethod }) {
     this.camera = options?.camera ?? new Camera();
@@ -83,6 +97,24 @@ export class SplatRenderer {
       },
       primitive: { topology: 'triangle-list', cullMode: 'none' },
     });
+
+    this.pickPipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module: renderModule, entryPoint: 'vs_main' },
+      fragment: {
+        module: renderModule,
+        entryPoint: 'fs_pick',
+        targets: [{ format: 'r32uint' }],
+      },
+      primitive: { topology: 'triangle-list', cullMode: 'none' },
+    });
+
+    this.readbackBuf = device.createBuffer({
+      size: PICK_READBACK_BYTES_PER_ROW,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    this.gpu.canvas.addEventListener('pointermove', this.onPointerMoveBound);
 
     // Uniform: 2*mat4(128) + vec2(8) + u32(4) + u32(4) + vec4(16) = 160 bytes
     this.preprocessUniformBuf = device.createBuffer({
@@ -142,8 +174,9 @@ export class SplatRenderer {
     this.camera.setAspect(width / height);
   }
 
-  startLoop(onFrame?: () => void): void {
+  startLoop(onFrame?: () => void, onStatsPartial?: (partial: Partial<SplatStats>) => void): void {
     this.onFrame = onFrame;
+    this.onStatsPartial = onStatsPartial;
     if (this.running) return;
     this.running = true;
     this.tick();
@@ -237,12 +270,63 @@ export class SplatRenderer {
     rp.draw(6, this.numSplats, 0, 0);
     rp.end();
 
+    // ---- 4. Pick pass (splat index into R32Uint texture) ----
+    this.ensurePickTexture();
+    let didCopy = false;
+    if (this.pickTexture && this.pickX >= 0 && !this.readbackPending) {
+      const pickBG = device.createBindGroup({
+        layout: this.pickPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: this.splatOutBuf } },
+          { binding: 1, resource: { buffer: sortedValuesBuf } },
+        ],
+      });
+      const pickRp = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: this.pickTexture.createView(),
+          clearValue: { r: PICK_NO_HIT, g: 0, b: 0, a: 0 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      pickRp.setPipeline(this.pickPipeline);
+      pickRp.setBindGroup(0, pickBG);
+      pickRp.draw(6, this.numSplats, 0, 0);
+      pickRp.end();
+
+      encoder.copyTextureToBuffer(
+        { texture: this.pickTexture, origin: [this.pickX, this.pickY, 0] },
+        {
+          buffer: this.readbackBuf,
+          bytesPerRow: PICK_READBACK_BYTES_PER_ROW,
+          rowsPerImage: 1,
+        },
+        { width: 1, height: 1, depthOrArrayLayers: 1 },
+      );
+      this.readbackPending = true;
+      didCopy = true;
+    }
+
     device.queue.submit([encoder.finish()]);
+
+    if (didCopy) {
+      this.readbackBuf.mapAsync(GPUMapMode.READ).then(() => {
+        const idx = new Uint32Array(this.readbackBuf.getMappedRange(0, 4))[0];
+        this.readbackBuf.unmap();
+        this.readbackPending = false;
+        const hoveredSplatIndex = idx === PICK_NO_HIT ? null : idx;
+        this.onStatsPartial?.({ hoveredSplatIndex });
+      });
+    }
   }
 
   dispose(): void {
     this.stopLoop();
+    this.gpu.canvas.removeEventListener('pointermove', this.onPointerMoveBound);
     this.camera.detach();
+    this.pickTexture?.destroy();
+    this.pickTexture = null;
+    this.readbackBuf?.destroy();
     this.positionBuf?.destroy();
     this.rotationBuf?.destroy();
     this.scaleBuf?.destroy();
@@ -252,6 +336,39 @@ export class SplatRenderer {
     this.preprocessUniformBuf?.destroy();
     this.sorter?.destroy();
     this.gpu.dispose();
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    const canvas = this.gpu.canvas;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      this.pickX = -1;
+      return;
+    }
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+      this.pickX = Math.min(Math.floor(x), canvas.width - 1);
+      this.pickY = Math.min(Math.floor(y), canvas.height - 1);
+    } else {
+      this.pickX = -1;
+    }
+  }
+
+  private ensurePickTexture(): void {
+    const w = this.gpu.canvas.width;
+    const h = this.gpu.canvas.height;
+    if (this.pickTexture && this.pickTextureWidth === w && this.pickTextureHeight === h) return;
+    this.pickTexture?.destroy();
+    this.pickTextureWidth = w;
+    this.pickTextureHeight = h;
+    this.pickTexture = this.gpu.device.createTexture({
+      size: [w, h, 1],
+      format: 'r32uint',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
   }
 
   private tick = (): void => {
