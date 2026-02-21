@@ -26,6 +26,7 @@ struct VertexOut {
   @location(0) d_ndc:       vec2<f32>,  // offset from splat center in NDC
   @location(1) color:       vec4<f32>,  // rgb + opacity
   @location(2) conic:       vec3<f32>,  // conic in NDC: (a, b, d)
+  @location(3) @interpolate(flat) splatIdx: u32,
 };
 
 @vertex
@@ -63,6 +64,7 @@ fn vs_main(
   out.d_ndc = offset;
   out.color = vec4<f32>(r, g, b, opacity);
   out.conic = cn;
+  out.splatIdx = splatIdx;
   return out;
 }
 
@@ -87,4 +89,19 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 
   // Premultiplied alpha
   return vec4<f32>(in.color.rgb * alpha, alpha);
+}
+
+@fragment
+fn fs_pick(in: VertexOut) -> @location(0) vec4<u32> {
+  let d = in.d_ndc;
+  let power = -0.5 * (in.conic.x * d.x * d.x + 2.0 * in.conic.y * d.x * d.y + in.conic.z * d.y * d.y);
+  if (power > 0.0) {
+    discard;
+  }
+  let gaussian = exp(power);
+  let alpha = in.color.a * gaussian;
+  if (alpha < 1.0 / 255.0) {
+    discard;
+  }
+  return vec4<u32>(in.splatIdx, 0u, 0u, 0u);
 }

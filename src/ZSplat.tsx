@@ -97,19 +97,24 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
 
         onLoad?.({ numSplats: splatData.count });
 
-        // Start render loop with FPS tracking
-        renderer.startLoop(() => {
-          const now = performance.now();
-          const times = frameTimesRef.current;
-          times.push(now);
-          // Keep last 60 frames
-          while (times.length > 60) times.shift();
-          if (times.length >= 2) {
-            const elapsed = times[times.length - 1] - times[0];
-            statsRef.current.fps = Math.round(((times.length - 1) / elapsed) * 1000);
-          }
-          onStats?.({ ...statsRef.current });
-        });
+        // Start render loop with FPS tracking and pick readback stats (e.g. hoveredSplatIndex)
+        renderer.startLoop(
+          () => {
+            const now = performance.now();
+            const times = frameTimesRef.current;
+            times.push(now);
+            while (times.length > 60) times.shift();
+            if (times.length >= 2) {
+              const elapsed = times[times.length - 1] - times[0];
+              statsRef.current.fps = Math.round(((times.length - 1) / elapsed) * 1000);
+            }
+            onStats?.({ ...statsRef.current });
+          },
+          (partial) => {
+            statsRef.current = { ...statsRef.current, ...partial };
+            onStats?.(statsRef.current);
+          },
+        );
 
         // Set up resize observer
         const ro = new ResizeObserver(() => {

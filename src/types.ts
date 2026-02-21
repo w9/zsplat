@@ -56,6 +56,8 @@ export interface SplatStats {
   loadTimeMs: number;
   fps: number;
   gpuMemoryBytes: number;
+  /** Splat index under cursor (from GPU pick). null when no hit or outside canvas. */
+  hoveredSplatIndex?: number | null;
 }
 
 /** Props for the React <ZSplat> component */

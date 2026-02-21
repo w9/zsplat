@@ -39,7 +39,7 @@ fn histogram(
   @builtin(workgroup_id)          wgid: vec3<u32>,
   @builtin(local_invocation_id)   lid: vec3<u32>,
 ) {
-  // Clear shared histogram
+  // Clear shared histogram (not needed but doesn't hurt performance)
   atomicStore(&localHist[lid.x], 0u);
   workgroupBarrier();
 
