@@ -1,7 +1,5 @@
-/* Inline padding so * { padding:0 } in index.html doesn't strip it */
-const buttonStyle = { padding: '5px 14px' };
-const buttonBase =
-  'bg-white/10 border border-white/20 rounded-md text-white text-[13px] cursor-pointer font-[inherit]';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export function Toolbar({
   onOpen,
@@ -19,31 +17,50 @@ export function Toolbar({
   onTurntableChange: (v: boolean) => void;
 }) {
   return (
-    <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 border-b border-white/[0.08] shrink-0">
+    <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 border-b border-border shrink-0">
       <span className="font-bold text-base tracking-tight">ZSplat</span>
-      <button type="button" style={buttonStyle} className={buttonBase} onClick={onOpen}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn(
+          'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
+          'bg-white/10 border-white/20 text-white hover:bg-white/15 hover:text-white dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/15'
+        )}
+        onClick={onOpen}
+      >
         Open PLY/SPZ/RAD
-      </button>
-      <span className="text-[11px] opacity-40">Ctrl+O</span>
+      </Button>
+      <span className="text-[11px] text-muted-foreground">Ctrl+O</span>
       {hasScene && (
-        <button
+        <Button
           type="button"
-          style={buttonStyle}
-          className={`${buttonBase} ${shEnabled ? 'bg-green-500/15 border-green-500/40 text-green-400' : 'bg-red-500/15 border-red-500/40 text-red-400'}`}
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
+            shEnabled
+              ? 'bg-green-500/15 border-green-500/40 text-green-400 hover:bg-green-500/20'
+              : 'bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/20'
+          )}
           onClick={() => onShChange(!shEnabled)}
         >
           SH {shEnabled ? 'ON' : 'OFF'}
-        </button>
+        </Button>
       )}
       {hasScene && (
-        <button
+        <Button
           type="button"
-          style={buttonStyle}
-          className={`${buttonBase} ${turntable ? 'bg-sky-500/20 border-sky-500/50 text-sky-300' : ''}`}
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
+            turntable && 'bg-sky-500/20 border-sky-500/50 text-sky-300 hover:bg-sky-500/25'
+          )}
           onClick={() => onTurntableChange(!turntable)}
         >
           Turntable {turntable ? 'ON' : 'OFF'}
-        </button>
+        </Button>
       )}
     </div>
   );

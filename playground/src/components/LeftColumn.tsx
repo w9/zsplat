@@ -31,7 +31,7 @@ export function LeftColumn({
   setTurntable: (v: boolean) => void;
 }) {
   return (
-    <div className="w-[260px] min-w-[260px] h-full flex flex-col bg-black/85 border-r border-white/[0.08] shrink-0">
+    <div className="w-[260px] min-w-[260px] h-full flex flex-col bg-background/95 border-r border-border shrink-0">
       <Toolbar
         onOpen={openFilePicker}
         hasScene={!!src}

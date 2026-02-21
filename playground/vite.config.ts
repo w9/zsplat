@@ -4,6 +4,7 @@ import { resolve } from 'path';
 export default defineConfig({
   resolve: {
     alias: {
+      '@': resolve(__dirname, './src'),
       // In dev, resolve zsplat from source for HMR
       zsplat: resolve(__dirname, '../src/index.ts'),
     },

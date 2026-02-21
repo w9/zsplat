@@ -151,7 +151,7 @@ export function App() {
         {error && <ErrorOverlay message={error} onBack={() => { setError(null); setSrc(null); }} />}
         {dragging && <DragOverlay />}
         {src && (
-          <div className="absolute bottom-3 left-0 right-0 text-center text-[11px] opacity-30 pointer-events-none z-10">
+          <div className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-muted-foreground pointer-events-none z-10">
             Left drag: rotate · Right drag / Shift+drag: pan · Scroll: zoom
           </div>
         )}
