@@ -62,6 +62,20 @@ export class SplatRenderer {
   private pickY = -1;
   private onPointerMoveBound = this.handlePointerMove.bind(this);
 
+  private _pickEnabled = false;
+  /** When false, no pick pass or texture; pointer move does not update pick. Default false. */
+  get pickEnabled(): boolean {
+    return this._pickEnabled;
+  }
+  set pickEnabled(value: boolean) {
+    if (this._pickEnabled === value) return;
+    this._pickEnabled = value;
+    if (!value) {
+      this.pickX = -1;
+      this.onStatsPartial?.({ hoveredSplatIndex: null });
+    }
+  }
+
   constructor(options?: { camera?: Camera; sort?: SortMethod }) {
     this.camera = options?.camera ?? new Camera();
     this.sortMethod = options?.sort ?? 'cpu';
@@ -271,8 +285,8 @@ export class SplatRenderer {
     rp.end();
 
     // ---- 4. Pick pass (splat index into R32Uint texture) ----
-    this.ensurePickTexture();
     let didCopy = false;
+    if (this._pickEnabled) this.ensurePickTexture();
     if (this.pickTexture && this.pickX >= 0 && !this.readbackPending) {
       const pickBG = device.createBindGroup({
         layout: this.pickPipeline.getBindGroupLayout(0),
@@ -339,6 +353,10 @@ export class SplatRenderer {
   }
 
   private handlePointerMove(e: PointerEvent): void {
+    if (!this._pickEnabled) {
+      this.pickX = -1;
+      return;
+    }
     const canvas = this.gpu.canvas;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {

@@ -1,5 +1,5 @@
 import { Icon } from '@mdi/react';
-import { mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
+import { mdiCursorDefaultClick, mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,8 @@ export function Toolbar({
   onShChange,
   turntable,
   onTurntableChange,
+  hoverEnabled,
+  onHoverChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -20,6 +22,8 @@ export function Toolbar({
   onShChange: (v: boolean) => void;
   turntable: boolean;
   onTurntableChange: (v: boolean) => void;
+  hoverEnabled: boolean;
+  onHoverChange: (v: boolean) => void;
 }) {
   return (
     <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 shrink-0">
@@ -55,6 +59,18 @@ export function Toolbar({
         >
           <Icon path={mdiRotate360} size={iconSize} />
           Turntable
+        </Toggle>
+      )}
+      {hasScene && (
+        <Toggle
+          pressed={hoverEnabled}
+          onPressedChange={onHoverChange}
+          variant="outline"
+          size="sm"
+          title="Hover"
+        >
+          <Icon path={mdiCursorDefaultClick} size={iconSize} />
+          Hover
         </Toggle>
       )}
     </div>

@@ -45,9 +45,6 @@ export function StatsPanel({
             {stats.fps} fps
           </Button>
         )}
-        <span className={cn(statClass, 'w-[10rem]')}>
-          Hovered: {stats.hoveredSplatIndex != null ? `splat ${stats.hoveredSplatIndex}` : '—'}
-        </span>
       </div>
     </div>
   );

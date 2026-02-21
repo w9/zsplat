@@ -7,6 +7,8 @@ export function TopBar({
   onShChange,
   turntable,
   onTurntableChange,
+  hoverEnabled,
+  onHoverChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -14,6 +16,8 @@ export function TopBar({
   onShChange: (v: boolean) => void;
   turntable: boolean;
   onTurntableChange: (v: boolean) => void;
+  hoverEnabled: boolean;
+  onHoverChange: (v: boolean) => void;
 }) {
   return (
     <header className="absolute top-0 left-0 right-0 z-10 bg-transparent pointer-events-none [&>*]:pointer-events-auto">
@@ -24,6 +28,8 @@ export function TopBar({
         onShChange={onShChange}
         turntable={turntable}
         onTurntableChange={onTurntableChange}
+        hoverEnabled={hoverEnabled}
+        onHoverChange={onHoverChange}
       />
     </header>
   );

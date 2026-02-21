@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ZSplat } from 'zsplat';
-import type { SplatStats } from 'zsplat';
+import type { SplatData, SplatStats } from 'zsplat';
 import type { OpenDetail } from './types';
 import { FPS_SAMPLES_CAP, computeRunningStats } from './utils/stats';
 import { TopBar } from './components/TopBar';
@@ -60,6 +60,8 @@ export function App() {
   const [dragging, setDragging] = useState(false);
   const [shEnabled, setShEnabled] = useState(() => getSavedState()?.shEnabled ?? true);
   const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? false);
+  const [hoverEnabled, setHoverEnabled] = useState(false);
+  const [splatData, setSplatData] = useState<SplatData | null>(null);
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,13 +73,15 @@ export function App() {
     setError(null);
     setLoading(true);
     setStats(null);
+    setSplatData(null);
     setRunningStats(null);
     fpsSamplesRef.current = [];
     setSrc(file);
   }, []);
 
-  const handleLoad = useCallback((info: { numSplats: number }) => {
+  const handleLoad = useCallback((info: { numSplats: number; splatData?: SplatData }) => {
     setLoading(false);
+    setSplatData(info.splatData ?? null);
     setStats((prev) =>
       prev ? { ...prev, numSplats: info.numSplats } : { numSplats: info.numSplats, loadTimeMs: 0, fps: 0, gpuMemoryBytes: 0 },
     );
@@ -164,6 +168,7 @@ export function App() {
             className="w-full h-full block"
             shEnabled={shEnabled}
             turntable={turntable}
+            hoverEnabled={hoverEnabled}
             onLoad={handleLoad}
             onError={handleError}
             onStats={handleStats}
@@ -180,6 +185,8 @@ export function App() {
         onShChange={setShEnabled}
         turntable={turntable}
         onTurntableChange={setTurntable}
+        hoverEnabled={hoverEnabled}
+        onHoverChange={setHoverEnabled}
       />
 
       <BottomBar
@@ -193,6 +200,8 @@ export function App() {
         openDetail={openDetail}
         stats={stats}
         runningStats={runningStats}
+        hoverEnabled={hoverEnabled}
+        splatData={splatData}
         onReset={handleResetRunningStats}
         onOpenDetailChange={setOpenDetail}
       />

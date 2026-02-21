@@ -70,7 +70,9 @@ export interface ZSplatProps {
   shEnabled?: boolean;
   /** Auto-rotate camera around target (turntable mode). Default false. */
   turntable?: boolean;
-  onLoad?: (info: { numSplats: number }) => void;
+  /** Enable GPU pick for hovered splat index. Default false. */
+  hoverEnabled?: boolean;
+  onLoad?: (info: { numSplats: number; splatData?: SplatData }) => void;
   onError?: (err: Error) => void;
   onStats?: (stats: SplatStats) => void;
 }

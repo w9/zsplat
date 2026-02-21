@@ -18,7 +18,7 @@ import { loadRad, isRadFile } from './loaders/rad-loader';
  */
 const TURNTABLE_SPEED = 0.004; // radians per frame (~full rotation in ~25s at 60fps)
 
-export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, onLoad, onError, onStats }: ZSplatProps) {
+export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, hoverEnabled = false, onLoad, onError, onStats }: ZSplatProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SplatRenderer | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
@@ -38,6 +38,13 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
       rendererRef.current.turntableSpeed = turntable ? TURNTABLE_SPEED : 0;
     }
   }, [turntable]);
+
+  // Sync hoverEnabled prop to renderer (pick pass disabled when false)
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.pickEnabled = hoverEnabled;
+    }
+  }, [hoverEnabled]);
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -95,7 +102,7 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
         statsRef.current.loadTimeMs = loadTime;
         statsRef.current.gpuMemoryBytes = estimateGpuMemory(splatData.count);
 
-        onLoad?.({ numSplats: splatData.count });
+        onLoad?.({ numSplats: splatData.count, splatData });
 
         // Start render loop with FPS tracking and pick readback stats (e.g. hoveredSplatIndex)
         renderer.startLoop(
@@ -115,6 +122,7 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
             onStats?.(statsRef.current);
           },
         );
+        renderer.pickEnabled = hoverEnabled;
 
         // Set up resize observer
         const ro = new ResizeObserver(() => {
