@@ -34,64 +34,61 @@ export function FpsDetailCard({
   onClose?: () => void;
 }) {
   return (
-    <Card className="relative rounded-md bg-card/95 border-border shadow-md gap-0 py-0">
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-1.5 right-1.5 p-0.5 text-muted-foreground/70 hover:text-muted-foreground text-sm leading-none rounded cursor-pointer font-[inherit]"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      )}
-      <CardContent className="pt-2.5 pb-1.5 pl-3 pr-7 text-muted-foreground/90">
+    <Card className="flex flex-col rounded-md bg-card/95 border-border shadow-md gap-0 py-0">
+      <div className="flex flex-row items-center justify-between min-h-8 px-3 py-1.5 border-b border-border shrink-0">
+        <span className="text-xs font-medium text-muted-foreground">FPS</span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-0.5 text-muted-foreground/70 hover:text-muted-foreground text-sm leading-none rounded cursor-pointer font-[inherit]"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <CardContent className="pt-2.5 pb-1.5 pl-3 pr-3 text-muted-foreground/90 shrink-0">
         <div className="grid gap-0.5">
           <div className={FPS_ROW_CLASS}>
             <span>FPS</span>
             <span className="tabular-nums">{currentFps != null ? currentFps : '—'}</span>
           </div>
-          {runningStats ? (
-          <>
-            <div className={FPS_ROW_CLASS}>
-              <span>Average</span>
-              <span className="tabular-nums">{Math.round(runningStats.avg)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>Minimum</span>
-              <span className="tabular-nums">{Math.round(runningStats.min)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>Maximum</span>
-              <span className="tabular-nums">{Math.round(runningStats.max)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>5th percentile</span>
-              <span className="tabular-nums">{Math.round(runningStats.p5)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>25th percentile</span>
-              <span className="tabular-nums">{Math.round(runningStats.p25)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>Median</span>
-              <span className="tabular-nums">{Math.round(runningStats.p50)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>75th percentile</span>
-              <span className="tabular-nums">{Math.round(runningStats.p75)}</span>
-            </div>
-            <div className={FPS_ROW_CLASS}>
-              <span>95th percentile</span>
-              <span className="tabular-nums">{Math.round(runningStats.p95)}</span>
-            </div>
-          </>
-          ) : (
-          <p className="text-xs leading-6 pt-0.5">No samples yet</p>
-          )}
+          <div className={FPS_ROW_CLASS}>
+            <span>Average</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.avg) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>Minimum</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.min) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>Maximum</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.max) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>5th percentile</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.p5) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>25th percentile</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.p25) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>Median</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.p50) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>75th percentile</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.p75) : '—'}</span>
+          </div>
+          <div className={FPS_ROW_CLASS}>
+            <span>95th percentile</span>
+            <span className="tabular-nums">{runningStats != null ? Math.round(runningStats.p95) : '—'}</span>
+          </div>
         </div>
       </CardContent>
-      <CardFooter className="pt-1 pb-2.5 pl-3 pr-7 flex flex-wrap gap-2">
+      <CardFooter className="pt-1 pb-2.5 pl-3 pr-3 flex flex-wrap gap-2 shrink-0">
         <Button
           type="button"
           variant="outline"
