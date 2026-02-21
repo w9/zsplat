@@ -7,6 +7,7 @@ import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
 import { loadSog, isSogFile } from './loaders/sog-loader';
 import { loadSpz, isSpzFile } from './loaders/spz-loader';
+import { loadRad, isRadFile } from './loaders/rad-loader';
 
 /**
  * React component that renders 3D Gaussian Splats via WebGPU.
@@ -148,17 +149,41 @@ async function loadSplatData(src: string | File): Promise<SplatData> {
   }
 
   let buffer: ArrayBuffer;
-  if (src instanceof File) {
-    buffer = await src.arrayBuffer();
+  const fileLike =
+    src instanceof File ||
+    (typeof src === 'object' && src !== null && typeof (src as File).arrayBuffer === 'function');
+  if (fileLike) {
+    buffer = await (src as File).arrayBuffer();
   } else {
-    const resp = await fetch(src);
-    if (!resp.ok) throw new Error(`Failed to fetch ${src}: ${resp.status}`);
-    buffer = await resp.arrayBuffer();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10 min for large files
+    try {
+      const resp = await fetch(src, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!resp.ok) throw new Error(`Failed to fetch ${src}: ${resp.status}`);
+      buffer = await resp.arrayBuffer();
+    } catch (e) {
+      clearTimeout(timeoutId);
+      const isBlob = typeof src === 'string' && src.startsWith('blob:');
+      const hint = isBlob
+        ? ' Pass the File object from the file picker instead of URL.createObjectURL(file).'
+        : ' For large files (e.g. >100MB), open via the file picker and pass the File directly.';
+      const msg =
+        e instanceof Error && e.name === 'AbortError'
+          ? `Request timed out loading ${src}.${hint}`
+          : e instanceof Error
+            ? `${e.message}.${hint}`
+            : 'Failed to load file.';
+      throw new Error(msg);
+    }
   }
 
-  const name = src instanceof File ? src.name : src;
+  const name = fileLike ? (src as File).name : (src as string);
   if (isSpzFile(name)) {
     return loadSpz(buffer);
+  }
+  if (isRadFile(name)) {
+    return loadRad(buffer);
   }
 
   const ply = parsePlyHeader(buffer);
