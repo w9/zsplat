@@ -1,5 +1,10 @@
+import { Icon } from '@mdi/react';
+import { mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
+
+const iconSize = '14px';
 
 export function Toolbar({
   onOpen,
@@ -23,44 +28,34 @@ export function Toolbar({
         type="button"
         variant="outline"
         size="sm"
-        className={cn(
-          'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
-          'bg-white/10 border-white/20 text-white hover:bg-white/15 hover:text-white dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/15'
-        )}
         onClick={onOpen}
       >
+        <Icon path={mdiFolderOpen} size={iconSize} />
         Open PLY/SPZ/RAD
       </Button>
-      <span className="text-[11px] text-muted-foreground">Ctrl+O</span>
       {hasScene && (
-        <Button
-          type="button"
+        <Toggle
+          pressed={shEnabled}
+          onPressedChange={onShChange}
           variant="outline"
           size="sm"
-          className={cn(
-            'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
-            shEnabled
-              ? 'bg-green-500/15 border-green-500/40 text-green-400 hover:bg-green-500/20'
-              : 'bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/20'
-          )}
-          onClick={() => onShChange(!shEnabled)}
+          title="Spherical harmonics"
         >
-          SH {shEnabled ? 'ON' : 'OFF'}
-        </Button>
+          <Icon path={mdiSphere} size={iconSize} />
+          Spherical harmonics
+        </Toggle>
       )}
       {hasScene && (
-        <Button
-          type="button"
+        <Toggle
+          pressed={turntable}
+          onPressedChange={onTurntableChange}
           variant="outline"
           size="sm"
-          className={cn(
-            'h-auto py-1.5 px-3.5 text-[13px] font-[inherit]',
-            turntable && 'bg-sky-500/20 border-sky-500/50 text-sky-300 hover:bg-sky-500/25'
-          )}
-          onClick={() => onTurntableChange(!turntable)}
+          title="Turntable"
         >
-          Turntable {turntable ? 'ON' : 'OFF'}
-        </Button>
+          <Icon path={mdiRotate360} size={iconSize} />
+          Turntable
+        </Toggle>
       )}
     </div>
   );

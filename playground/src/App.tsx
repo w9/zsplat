@@ -126,17 +126,6 @@ export function App() {
   }, [src, stats, shEnabled, turntable]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'o' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        fileInputRef.current?.click();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  useEffect(() => {
     if (openDetail !== 'fps') return;
     const tick = () => setRunningStats(computeRunningStats(fpsSamplesRef.current));
     tick();
