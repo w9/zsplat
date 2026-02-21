@@ -204,6 +204,7 @@ export function App() {
         splatData={splatData}
         onReset={handleResetRunningStats}
         onOpenDetailChange={setOpenDetail}
+        onCloseHover={() => setHoverEnabled(false)}
       />
 
       {loading && <LoadingOverlay />}

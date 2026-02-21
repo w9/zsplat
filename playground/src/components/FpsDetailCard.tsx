@@ -1,5 +1,5 @@
 import type { RunningStats } from '../utils/stats';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 const FPS_ROW_CLASS = 'flex justify-between gap-4 text-xs leading-6 text-muted-foreground/90';
@@ -26,28 +26,13 @@ export function FpsDetailCard({
   currentFps,
   runningStats,
   onReset,
-  onClose,
 }: {
   currentFps: number | null;
   runningStats: RunningStats | null;
   onReset: () => void;
-  onClose?: () => void;
 }) {
   return (
-    <Card className="flex flex-col rounded-md bg-card/95 border-border shadow-md gap-0 py-0">
-      <div className="flex flex-row items-center justify-between min-h-8 px-3 py-1.5 border-b border-border shrink-0">
-        <span className="text-xs font-medium text-muted-foreground">FPS</span>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-0.5 text-muted-foreground/70 hover:text-muted-foreground text-sm leading-none rounded cursor-pointer font-[inherit]"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        )}
-      </div>
+    <>
       <CardContent className="pt-2.5 pb-1.5 pl-3 pr-3 text-muted-foreground/90 shrink-0">
         <div className="grid gap-0.5">
           <div className={FPS_ROW_CLASS}>
@@ -109,6 +94,6 @@ export function FpsDetailCard({
           Reset
         </Button>
       </CardFooter>
-    </Card>
+    </>
   );
 }

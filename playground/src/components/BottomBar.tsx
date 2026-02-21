@@ -3,6 +3,7 @@ import type { OpenDetail } from '../types';
 import { StatsPanel } from './StatsPanel';
 
 export const BOTTOM_BAR_OFFSET = 56;
+export const TOP_BAR_OFFSET = 52;
 
 export function BottomBar({
   stats,

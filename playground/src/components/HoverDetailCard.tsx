@@ -1,5 +1,5 @@
 import type { SplatData } from 'zsplat';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 
 const ROW_CLASS = 'flex justify-between gap-4 text-xs leading-6 text-muted-foreground/90';
 
@@ -28,16 +28,18 @@ export function HoverDetailCard({
   const props = hoveredSplatIndex != null && splatData ? getSplatProperties(splatData, hoveredSplatIndex) : null;
 
   return (
-    <Card className="flex flex-col rounded-md bg-card/95 border-border shadow-md gap-0 py-0">
-      <div className="flex flex-row items-center justify-between min-h-8 px-3 py-1.5 border-b border-border shrink-0">
-        <span className="text-xs font-medium text-muted-foreground">Hover</span>
-      </div>
-      <CardContent className="pt-2.5 pb-1.5 pl-3 pr-3 text-muted-foreground/90 shrink-0">
+    <CardContent className="pt-2.5 pb-1.5 pl-3 pr-3 text-muted-foreground/90 shrink-0">
         <div className="grid gap-0.5">
-          <div className={ROW_CLASS}>
-            <span>ID</span>
-            <span className="tabular-nums">{hoveredSplatIndex != null ? hoveredSplatIndex : '—'}</span>
-          </div>
+          {hoveredSplatIndex == null ? (
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              Hover over a splat in the scene to see its ID and properties.
+            </p>
+          ) : (
+            <>
+              <div className={ROW_CLASS}>
+                <span>ID</span>
+                <span className="tabular-nums">{hoveredSplatIndex}</span>
+              </div>
           {props ? (
             <>
               <div className={ROW_CLASS}>
@@ -65,14 +67,15 @@ export function HoverDetailCard({
                 </span>
               </div>
             </>
-          ) : hoveredSplatIndex != null && splatData ? (
+          ) : splatData ? (
             <div className={ROW_CLASS}>
               <span>Properties</span>
               <span>—</span>
             </div>
           ) : null}
+            </>
+          )}
         </div>
       </CardContent>
-    </Card>
   );
 }

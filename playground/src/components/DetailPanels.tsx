@@ -1,9 +1,9 @@
 import type { SplatData, SplatStats } from 'zsplat';
 import type { OpenDetail } from '../types';
 import type { RunningStats } from '../utils/stats';
+import { DetailPanelWrapper } from './DetailPanelWrapper';
 import { FpsDetailCard } from './FpsDetailCard';
 import { HoverDetailCard } from './HoverDetailCard';
-import { BOTTOM_BAR_OFFSET } from './BottomBar';
 
 export type DetailPanelsProps = {
   openDetail: OpenDetail;
@@ -13,6 +13,7 @@ export type DetailPanelsProps = {
   splatData: SplatData | null;
   onReset: () => void;
   onOpenDetailChange: (v: OpenDetail) => void;
+  onCloseHover?: () => void;
 };
 
 export function DetailPanels({
@@ -23,26 +24,39 @@ export function DetailPanels({
   splatData,
   onReset,
   onOpenDetailChange,
+  onCloseHover,
 }: DetailPanelsProps) {
   return (
-    <div
-      className="absolute left-0 z-10 flex flex-col-reverse gap-1.5 p-1.5 pl-3 pointer-events-none [&>*]:pointer-events-auto"
-      style={{ bottom: BOTTOM_BAR_OFFSET }}
-    >
+    <>
       {hoverEnabled && (
-        <HoverDetailCard
-          hoveredSplatIndex={stats?.hoveredSplatIndex ?? null}
-          splatData={splatData}
-        />
+        <DetailPanelWrapper
+          title="Hover"
+          anchor="top"
+          anchorIndex={0}
+          onClose={onCloseHover}
+          initialWidth={320}
+          initialHeight={186}
+        >
+          <HoverDetailCard
+            hoveredSplatIndex={stats?.hoveredSplatIndex ?? null}
+            splatData={splatData}
+          />
+        </DetailPanelWrapper>
       )}
       {openDetail === 'fps' && (
-        <FpsDetailCard
-          currentFps={stats?.fps ?? null}
-          runningStats={runningStats}
-          onReset={onReset}
+        <DetailPanelWrapper
+          title="FPS"
+          anchor="bottom"
+          anchorIndex={0}
           onClose={() => onOpenDetailChange(null)}
-        />
+        >
+          <FpsDetailCard
+            currentFps={stats?.fps ?? null}
+            runningStats={runningStats}
+            onReset={onReset}
+          />
+        </DetailPanelWrapper>
       )}
-    </div>
+    </>
   );
 }
