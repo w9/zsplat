@@ -6,10 +6,19 @@ type ScatterViewProps = {
   inputKeys: number[]
   inputValues: number[]
   digits: number[]
-  outputKeys: number[]
-  outputValues: number[]
+  outputKeys: Array<number | null>
+  outputValues: Array<number | null>
   outputDigits?: number[]
   scatterMap: ScatterMove[]
+  connectorMap?: ScatterMove[]
+  numWGs?: number
+  tileSize?: number
+  title?: string
+  cumOffsets?: number[][]
+  activeFromIndices?: number[]
+  activeDestIndices?: number[]
+  processedFromIndices?: number[]
+  processedDestIndices?: number[]
 }
 
 export function ScatterView({
@@ -20,38 +29,87 @@ export function ScatterView({
   outputValues,
   outputDigits = [],
   scatterMap,
+  connectorMap,
+  numWGs = 1,
+  tileSize = inputKeys.length,
+  title = "keysIn read → keysOut written",
+  cumOffsets = [],
+  activeFromIndices,
+  activeDestIndices,
+  processedFromIndices,
+  processedDestIndices,
 }: ScatterViewProps) {
   const cardW = 76
   const gap = 8
   const totalW = inputKeys.length * (cardW + gap) - gap
-  const x = (i: number) => cardW / 2 + i * (cardW + gap)
+  const padX = 32
+  const plotW = totalW + padX * 2
+  const x = (i: number) => padX + cardW / 2 + i * (cardW + gap)
+  const tickX = (index: number) => {
+    if (index <= 0) return padX
+    if (index >= inputKeys.length) return padX + totalW
+    return padX + index * (cardW + gap) - gap / 2
+  }
   const y1 = 2
   const y2 = 94
   const c = 36
+  const connectors = connectorMap ?? scatterMap
+  const activeFrom = new Set((activeFromIndices ?? scatterMap.map((m) => m.from)).filter((i) => i >= 0 && i < inputKeys.length))
+  const activeDest = new Set((activeDestIndices ?? scatterMap.map((m) => m.dest)).filter((i) => i >= 0 && i < outputKeys.length))
+  const processedFrom = new Set((processedFromIndices ?? []).filter((i) => i >= 0 && i < inputKeys.length))
+  const processedDest = new Set((processedDestIndices ?? []).filter((i) => i >= 0 && i < outputKeys.length))
+  const cumOffsetTicks = cumOffsets.flatMap((wgOffsets, wg) => wgOffsets.map((index, digit) => ({ wg, digit, index })))
+  const tickStacks = new Map<number, number>()
+  const stackedTicks = cumOffsetTicks.map((tick) => {
+    const stack = tickStacks.get(tick.index) ?? 0
+    tickStacks.set(tick.index, stack + 1)
+    return { ...tick, stack }
+  })
+  const maxStack = stackedTicks.reduce((m, t) => Math.max(m, t.stack + 1), 0)
+  const tickRowH = 30
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium">keysIn read → keysOut written</div>
-      <div className="overflow-x-auto">
-        <div className="space-y-1" style={{ width: `${totalW}px` }}>
-          <div className="flex gap-2">
+      <div className="text-sm font-medium">{title}</div>
+      <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+        {Array.from({ length: numWGs }, (_, wg) => {
+          const start = wg * tileSize
+          const end = Math.min(start + tileSize, inputKeys.length) - 1
+          return (
+            <span key={`wg-${wg}`} className="rounded bg-slate-100 px-2 py-0.5">
+              WG{wg}: idx {start}-{Math.max(start, end)}
+            </span>
+          )
+        })}
+      </div>
+      <div className="overflow-x-auto overflow-y-visible py-1">
+        <div className="space-y-1" style={{ width: `${plotW}px` }}>
+          <div className="flex gap-2" style={{ paddingLeft: `${padX}px`, paddingRight: `${padX}px` }}>
             {inputKeys.map((k, i) => (
+              (() => {
+                const isActive = activeFrom.has(i)
+                const isProcessed = !isActive && processedFrom.has(i)
+                return (
               <div
                 key={`in-${i}`}
                 className="rounded-md border-2 px-2 py-1 text-center text-sm font-semibold"
                 style={{
                   width: `${cardW}px`,
                   borderColor: DIGIT_STROKE[digits[i]],
-                  background: "#f8fafc",
+                  background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
+                  opacity: isActive ? 1 : isProcessed ? 0.75 : 0.2,
+                  boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
                 }}
               >
                 {k}
                 <div className="text-[10px] text-slate-500">#{inputValues[i]}</div>
               </div>
+                )
+              })()
             ))}
           </div>
-          <svg width={totalW} height={96} viewBox={`0 0 ${totalW} 96`} className="block">
-            {scatterMap.map((m) => (
+          <svg width={plotW} height={96} viewBox={`0 0 ${plotW} 96`} className="block">
+            {connectors.map((m) => (
               <path
                 key={`${m.from}-${m.dest}`}
                 d={`M ${x(m.from)} ${y1} C ${x(m.from)} ${y1 + c} ${x(m.dest)} ${y2 - c} ${x(m.dest)} ${y2}`}
@@ -62,21 +120,52 @@ export function ScatterView({
               />
             ))}
           </svg>
-          <div className="flex gap-2">
+          <div className="flex gap-2" style={{ paddingLeft: `${padX}px`, paddingRight: `${padX}px` }}>
             {outputKeys.map((k, i) => (
+              (() => {
+                const isActive = activeDest.has(i)
+                const isProcessed = !isActive && (processedDest.has(i) || outputValues[i] != null)
+                return (
               <div
                 key={`out-${i}`}
                 className="rounded-md border-2 bg-white px-2 py-1 text-center text-sm font-semibold"
                 style={{
                   width: `${cardW}px`,
-                  borderColor: outputDigits[i] != null ? DIGIT_STROKE[outputDigits[i]] : "#cbd5e1",
+                  borderColor: outputDigits[i] != null && outputDigits[i] >= 0 ? DIGIT_STROKE[outputDigits[i]] : "#cbd5e1",
+                  background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
+                  opacity: isActive ? 1 : isProcessed ? 0.75 : 0.2,
+                  boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
                 }}
               >
-                {k}
-                <div className="text-[10px] text-slate-500">#{outputValues[i]}</div>
+                {k ?? "·"}
+                <div className="text-[10px] text-slate-500">{outputValues[i] == null ? "\u00A0" : `#${outputValues[i]}`}</div>
               </div>
+                )
+              })()
             ))}
           </div>
+          {stackedTicks.length > 0 && (
+            <div className="relative mt-1" style={{ height: `${maxStack * tickRowH + 11}px` }}>
+              {stackedTicks.map((tick) => (
+                <div
+                  key={`tick-${tick.wg}-${tick.digit}-${tick.stack}`}
+                  className="absolute -translate-x-1/2 text-[10px] text-slate-600"
+                  style={{ left: `${tickX(tick.index)}px`, top: `${tick.stack * tickRowH}px` }}
+                >
+                  <div className="mx-auto h-2 w-px bg-slate-500" />
+                  <div
+                    className="whitespace-nowrap rounded border px-1 py-0.5 font-medium text-slate-700"
+                    style={{
+                      borderColor: DIGIT_STROKE[tick.digit],
+                      backgroundColor: `${DIGIT_STROKE[tick.digit]}33`,
+                    }}
+                  >
+                    WG{tick.wg} d{tick.digit}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

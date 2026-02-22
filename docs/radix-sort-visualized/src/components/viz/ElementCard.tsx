@@ -38,7 +38,7 @@ export function ElementCard({ value, index, digit = null, bitOffset = null, comp
             const start = bitOffset == null ? 0 : 8 - bitOffset - 2
             const active = bitOffset != null && i >= start && i < start + 2
             return (
-              <span key={`${i}-${ch}`} className={active ? "rounded bg-slate-800 px-0.5 text-white" : ""}>
+              <span key={`${i}-${ch}`} className={active ? "bg-slate-800 text-white" : ""}>
                 {ch}
               </span>
             )
