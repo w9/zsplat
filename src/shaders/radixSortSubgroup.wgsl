@@ -14,10 +14,10 @@ const ELEMENTS_PER_THREAD: u32 = 16u;
 const TILE_SIZE: u32 = 4096u;
 
 struct SortUniforms {
-  numElements: u32,
-  bitOffset:   u32,
-  numWGs:      u32,
-  _pad:        u32,
+  numElements:  u32,
+  bitOffset:    u32,
+  numWGs:       u32,
+  isFirstPass:  u32,
 };
 
 @group(0) @binding(0) var<uniform> su: SortUniforms;
@@ -53,7 +53,7 @@ fn stableScatterSubgroup(
     var myVal = 0u;
     if (i < su.numElements) {
       myKey = keysIn[i];
-      myVal = valsIn[i];
+      myVal = select(valsIn[i], i, su.isFirstPass != 0u);
       myDigit = (myKey >> su.bitOffset) & 0xFFu;
     }
 
@@ -67,11 +67,15 @@ fn stableScatterSubgroup(
 
       if (inSubgroup && myDigit < RADIX) {
         var rank = cumOffset[myDigit];
-        for (var j = sgStart; j < lid.x; j++) {
-          if (sharedDigits[j] == myDigit) {
-            rank++;
-          }
+        let limit = lid.x & ~3u;
+        var j = sgStart;
+        let jLimit = max(sgStart, limit);
+        for (; j < jLimit; j += 4u) {
+          let d = vec4<u32>(sharedDigits[j], sharedDigits[j+1u], sharedDigits[j+2u], sharedDigits[j+3u]);
+          rank += select(0u, 1u, d.x == myDigit) + select(0u, 1u, d.y == myDigit)
+                + select(0u, 1u, d.z == myDigit) + select(0u, 1u, d.w == myDigit);
         }
+        for (; j < lid.x; j++) { rank += select(0u, 1u, sharedDigits[j] == myDigit); }
         keysOut[rank] = myKey;
         valsOut[rank] = myVal;
         atomicAdd(&subgroupDigitCounts[myDigit], 1u);

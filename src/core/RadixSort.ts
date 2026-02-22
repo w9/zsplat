@@ -109,7 +109,7 @@ export class RadixSort implements Sorter {
     // Write ALL per-pass uniforms up front — each to its OWN buffer
     // so later writeBuffer calls don't overwrite earlier ones.
     for (let pass = 0; pass < NUM_PASSES; pass++) {
-      const data = new Uint32Array([numElements, pass * 8, numWGs, 0]);
+      const data = new Uint32Array([numElements, pass * 8, numWGs, pass === 0 ? 1 : 0]);
       this.device.queue.writeBuffer(this.passUniformBufs[pass], 0, data);
     }
 

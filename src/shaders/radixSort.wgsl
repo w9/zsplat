@@ -17,10 +17,10 @@ const ELEMENTS_PER_THREAD: u32 = 16u;
 const TILE_SIZE: u32 = 4096u;      // WG_SIZE * ELEMENTS_PER_THREAD
 
 struct SortUniforms {
-  numElements: u32,
-  bitOffset:   u32,    // 0, 8, 16, 24 for each pass
-  numWGs:      u32,
-  _pad:        u32,
+  numElements:  u32,
+  bitOffset:    u32,    // 0, 8, 16, 24 for each pass
+  numWGs:       u32,
+  isFirstPass:  u32,    // 1 on pass 0 (skip valsIn read), 0 otherwise
 };
 
 @group(0) @binding(0) var<uniform> su: SortUniforms;
@@ -29,6 +29,7 @@ struct SortUniforms {
 @group(0) @binding(3) var<storage, read_write> keysOut:  array<u32>;
 @group(0) @binding(4) var<storage, read_write> valsOut:  array<u32>;
 @group(0) @binding(5) var<storage, read_write> histBuf:  array<u32>; // RADIX * numWGs
+@group(0) @binding(6) var<storage, read_write> localPrefixBuf: array<u32>;
 
 // ---- Histogram ----
 var<workgroup> localHist: array<atomic<u32>, 256>;
@@ -150,7 +151,7 @@ fn scatter(
     let i = tileStart + lid.x * ELEMENTS_PER_THREAD + t;
     if (i < su.numElements) {
       let key = keysIn[i];
-      let val = valsIn[i];
+      let val = select(valsIn[i], i, su.isFirstPass != 0u);
       let digit = (key >> su.bitOffset) & 0xFFu;
       let dest = atomicAdd(&localOffsets[digit], 1u);
       keysOut[dest] = key;
@@ -190,7 +191,7 @@ fn stableScatter(
     var myVal = 0u;
     if (i < su.numElements) {
       myKey = keysIn[i];
-      myVal = valsIn[i];
+      myVal = select(valsIn[i], i, su.isFirstPass != 0u);
       myDigit = (myKey >> su.bitOffset) & 0xFFu;
     }
 
@@ -199,13 +200,17 @@ fn stableScatter(
     workgroupBarrier();
 
     // Compute rank: count threads with lower lid.x that share my digit
+    // Vectorized: process 4 sharedDigits entries per iteration
     if (myDigit < RADIX) {
       var rank = cumOffset[myDigit];
-      for (var j = 0u; j < lid.x; j++) {
-        if (sharedDigits[j] == myDigit) {
-          rank++;
-        }
+      let limit = lid.x & ~3u;
+      var j = 0u;
+      for (; j < limit; j += 4u) {
+        let d = vec4<u32>(sharedDigits[j], sharedDigits[j+1u], sharedDigits[j+2u], sharedDigits[j+3u]);
+        rank += select(0u, 1u, d.x == myDigit) + select(0u, 1u, d.y == myDigit)
+              + select(0u, 1u, d.z == myDigit) + select(0u, 1u, d.w == myDigit);
       }
+      for (; j < lid.x; j++) { rank += select(0u, 1u, sharedDigits[j] == myDigit); }
       keysOut[rank] = myKey;
       valsOut[rank] = myVal;
     }
@@ -213,17 +218,113 @@ fn stableScatter(
     workgroupBarrier();
 
     // Update cumulative offsets: each thread counts one digit
-    // (thread lid.x counts how many elements had digit == lid.x)
+    // Vectorized: process 4 entries per iteration
     if (lid.x < RADIX) {
       var count = 0u;
-      for (var j = 0u; j < WG_SIZE; j++) {
-        if (sharedDigits[j] == lid.x) {
-          count++;
-        }
+      let myBucket = lid.x;
+      var j2 = 0u;
+      for (; j2 + 3u < WG_SIZE; j2 += 4u) {
+        let d = vec4<u32>(sharedDigits[j2], sharedDigits[j2+1u], sharedDigits[j2+2u], sharedDigits[j2+3u]);
+        count += select(0u, 1u, d.x == myBucket) + select(0u, 1u, d.y == myBucket)
+               + select(0u, 1u, d.z == myBucket) + select(0u, 1u, d.w == myBucket);
       }
+      for (; j2 < WG_SIZE; j2++) { count += select(0u, 1u, sharedDigits[j2] == myBucket); }
       cumOffset[lid.x] += count;
     }
 
     workgroupBarrier();
   }
+}
+
+// ---- Stable Block Sum ----
+// Phase 1 of the separated scatter: computes per-element local prefix
+// (rank within workgroup) and per-WG histogram. Writes results to
+// localPrefixBuf and histBuf. No scatter writes.
+
+@compute @workgroup_size(256)
+fn stableBlockSum(
+  @builtin(workgroup_id)          wgid: vec3<u32>,
+  @builtin(local_invocation_id)   lid: vec3<u32>,
+) {
+  atomicStore(&localHist[lid.x], 0u);
+  workgroupBarrier();
+
+  let tileStart = wgid.x * TILE_SIZE;
+
+  for (var wave = 0u; wave < ELEMENTS_PER_THREAD; wave++) {
+    let i = tileStart + wave * WG_SIZE + lid.x;
+
+    var myDigit = RADIX;
+    if (i < su.numElements) {
+      let key = keysIn[i];
+      myDigit = (key >> su.bitOffset) & 0xFFu;
+    }
+
+    sharedDigits[lid.x] = myDigit;
+    workgroupBarrier();
+
+    // Vectorized rank: count same-digit threads with lower lid
+    if (myDigit < RADIX) {
+      var localRank = 0u;
+      let limit = lid.x & ~3u;
+      var j = 0u;
+      for (; j < limit; j += 4u) {
+        let d = vec4<u32>(sharedDigits[j], sharedDigits[j+1u], sharedDigits[j+2u], sharedDigits[j+3u]);
+        localRank += select(0u, 1u, d.x == myDigit) + select(0u, 1u, d.y == myDigit)
+                   + select(0u, 1u, d.z == myDigit) + select(0u, 1u, d.w == myDigit);
+      }
+      for (; j < lid.x; j++) { localRank += select(0u, 1u, sharedDigits[j] == myDigit); }
+
+      // Add cumulative offset from previous waves within this WG
+      localRank += atomicLoad(&localHist[myDigit]);
+      localPrefixBuf[i] = localRank;
+    }
+
+    workgroupBarrier();
+
+    // Update per-digit counts for this wave (vectorized)
+    if (lid.x < RADIX) {
+      var count = 0u;
+      let myBucket = lid.x;
+      var j2 = 0u;
+      for (; j2 + 3u < WG_SIZE; j2 += 4u) {
+        let d = vec4<u32>(sharedDigits[j2], sharedDigits[j2+1u], sharedDigits[j2+2u], sharedDigits[j2+3u]);
+        count += select(0u, 1u, d.x == myBucket) + select(0u, 1u, d.y == myBucket)
+               + select(0u, 1u, d.z == myBucket) + select(0u, 1u, d.w == myBucket);
+      }
+      for (; j2 < WG_SIZE; j2++) { count += select(0u, 1u, sharedDigits[j2] == myBucket); }
+      atomicAdd(&localHist[lid.x], count);
+    }
+
+    workgroupBarrier();
+  }
+
+  // Write final per-WG histogram to global histBuf
+  histBuf[lid.x * su.numWGs + wgid.x] = atomicLoad(&localHist[lid.x]);
+}
+
+// ---- Stable Reorder ----
+// Phase 3 of the separated scatter: trivial kernel that reads
+// pre-computed local prefix and global prefix-sum offsets to
+// compute final output position. No shared memory rank loops.
+
+@compute @workgroup_size(256)
+fn stableReorder(
+  @builtin(global_invocation_id)  gid: vec3<u32>,
+) {
+  let i = gid.x;
+  if (i >= su.numElements) { return; }
+
+  let key = keysIn[i];
+  let val = select(valsIn[i], i, su.isFirstPass != 0u);
+  let digit = (key >> su.bitOffset) & 0xFFu;
+  let localPrefix = localPrefixBuf[i];
+  // histBuf stores per-source-workgroup offsets; reorder dispatch workgroups
+  // are independent, so derive source WG from element index.
+  let sourceWG = i / TILE_SIZE;
+  let globalOffset = histBuf[digit * su.numWGs + sourceWG];
+  let dest = globalOffset + localPrefix;
+
+  keysOut[dest] = key;
+  valsOut[dest] = val;
 }
