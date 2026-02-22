@@ -54,6 +54,11 @@ export function Toolbar({
         <Icon path={mdiFolderOpen} size={iconSize} />
         Open PLY/SPZ
       </Button>
+      <Button asChild variant="outline" size="sm">
+        <a href="../radix-sort-visualized/" title="Open radix sort visualizer">
+          Radix Sort Visualization
+        </a>
+      </Button>
       {hasScene && (
         <Toggle
           pressed={shEnabled}
