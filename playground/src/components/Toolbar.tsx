@@ -2,7 +2,16 @@ import { Icon } from '@mdi/react';
 import { mdiAirplane, mdiCursorDefaultClick, mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
-import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+
+type SortMode = 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable';
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'gpu-subgroup', label: 'GPU Subgroup Optimized' },
+  { value: 'gpu', label: 'GPU Portable' },
+  { value: 'gpu-unstable', label: 'GPU Unstable' },
+  { value: 'cpu', label: 'CPU' },
+];
 
 const iconSize = '14px';
 
@@ -17,6 +26,8 @@ export function Toolbar({
   onHoverChange,
   cameraControlMode,
   onCameraControlModeChange,
+  sortMode,
+  onSortModeChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -28,6 +39,8 @@ export function Toolbar({
   onHoverChange: (v: boolean) => void;
   cameraControlMode: 'orbit' | 'fly';
   onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
+  sortMode: SortMode;
+  onSortModeChange: (v: SortMode) => void;
 }) {
   return (
     <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 shrink-0">
@@ -88,6 +101,21 @@ export function Toolbar({
           <Icon path={mdiAirplane} size={iconSize} />
           Fly
         </Toggle>
+      )}
+      {hasScene && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={sortMode}
+          onValueChange={(v) => { if (v) onSortModeChange(v as SortMode); }}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <ToggleGroupItem key={opt.value} value={opt.value} title={opt.label}>
+              {opt.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       )}
     </div>
   );

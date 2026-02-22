@@ -24,7 +24,13 @@ export class WebGPUContext {
     }
 
     // Request device with larger limits for million-splat scenes
+    const requiredFeatures: GPUFeatureName[] = [];
+    if (adapter.features.has('subgroups' as GPUFeatureName)) {
+      requiredFeatures.push('subgroups' as GPUFeatureName);
+    }
+
     const device = await adapter.requestDevice({
+      requiredFeatures,
       requiredLimits: {
         maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
         maxBufferSize: adapter.limits.maxBufferSize,

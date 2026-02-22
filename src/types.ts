@@ -74,6 +74,8 @@ export interface ZSplatProps {
   hoverEnabled?: boolean;
   /** Left-drag: 'orbit' = rotate around target, 'fly' = look around in place. Default 'orbit'. */
   cameraControlMode?: 'orbit' | 'fly';
+  /** Sorting method: 'gpu-subgroup' (stable subgroup-optimized, default), 'gpu' (stable portable), 'gpu-unstable', 'cpu'. */
+  sortMethod?: 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable';
   onLoad?: (info: { numSplats: number; splatData?: SplatData }) => void;
   onError?: (err: Error) => void;
   onStats?: (stats: SplatStats) => void;

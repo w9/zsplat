@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ZSplat } from 'zsplat';
-import type { SplatData, SplatStats } from 'zsplat';
+import type { SplatData, SplatStats, SortMethod } from 'zsplat';
 import type { OpenDetail } from './types';
 import { FPS_SAMPLES_CAP, computeRunningStats } from './utils/stats';
 import { TopBar } from './components/TopBar';
@@ -62,6 +62,7 @@ export function App() {
   const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? false);
   const [hoverEnabled, setHoverEnabled] = useState(false);
   const [cameraControlMode, setCameraControlMode] = useState<'orbit' | 'fly'>('orbit');
+  const [sortMode, setSortMode] = useState<SortMethod>('gpu-subgroup');
   const [splatData, setSplatData] = useState<SplatData | null>(null);
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
@@ -171,6 +172,7 @@ export function App() {
             turntable={turntable}
             hoverEnabled={hoverEnabled}
             cameraControlMode={cameraControlMode}
+            sortMethod={sortMode}
             onLoad={handleLoad}
             onError={handleError}
             onStats={handleStats}
@@ -191,6 +193,8 @@ export function App() {
         onHoverChange={setHoverEnabled}
         cameraControlMode={cameraControlMode}
         onCameraControlModeChange={setCameraControlMode}
+        sortMode={sortMode}
+        onSortModeChange={setSortMode}
       />
 
       <BottomBar

@@ -18,7 +18,7 @@ import { loadRad, isRadFile } from './loaders/rad-loader';
  */
 const TURNTABLE_SPEED = 0.004; // radians per frame (~full rotation in ~25s at 60fps)
 
-export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, hoverEnabled = false, cameraControlMode = 'orbit', onLoad, onError, onStats }: ZSplatProps) {
+export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, hoverEnabled = false, cameraControlMode = 'orbit', sortMethod = 'gpu-subgroup', onLoad, onError, onStats }: ZSplatProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SplatRenderer | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
@@ -78,7 +78,7 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
           far: camera?.far,
         });
 
-        const renderer = new SplatRenderer({ camera: cam, sort: 'gpu' });
+        const renderer = new SplatRenderer({ camera: cam, sort: sortMethod });
         rendererRef.current = renderer;
 
         // Size the canvas to CSS layout dimensions
@@ -155,7 +155,7 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
       rendererRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src]);
+  }, [src, sortMethod]);
 
   return <canvas ref={canvasRef} className={className} style={style} />;
 }

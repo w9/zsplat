@@ -11,6 +11,8 @@ export function TopBar({
   onHoverChange,
   cameraControlMode,
   onCameraControlModeChange,
+  sortMode,
+  onSortModeChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -22,6 +24,8 @@ export function TopBar({
   onHoverChange: (v: boolean) => void;
   cameraControlMode: 'orbit' | 'fly';
   onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
+  sortMode: 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable';
+  onSortModeChange: (v: 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable') => void;
 }) {
   return (
     <header className="absolute top-0 left-0 right-0 z-10 bg-transparent pointer-events-none [&>*]:pointer-events-auto">
@@ -36,6 +40,8 @@ export function TopBar({
         onHoverChange={onHoverChange}
         cameraControlMode={cameraControlMode}
         onCameraControlModeChange={onCameraControlModeChange}
+        sortMode={sortMode}
+        onSortModeChange={onSortModeChange}
       />
     </header>
   );

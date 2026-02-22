@@ -13,7 +13,7 @@ const SPLAT_FLOATS = 12;
 const PICK_READBACK_BYTES_PER_ROW = 256; // WebGPU requires bytesPerRow multiple of 256
 const PICK_NO_HIT = 0xffffffff;
 
-export type SortMethod = 'cpu' | 'gpu' | 'gpu-unstable';
+export type SortMethod = 'cpu' | 'gpu' | 'gpu-unstable' | 'gpu-subgroup';
 
 /**
  * Main Gaussian Splat renderer.
@@ -141,9 +141,10 @@ export class SplatRenderer {
     });
 
     switch (this.sortMethod) {
-      case 'gpu':          this.sorter = new StableRadixSort(device); break;
-      case 'gpu-unstable': this.sorter = new RadixSort(device); break;
-      default:             this.sorter = new CpuSort(device); break;
+      case 'gpu':           this.sorter = new StableRadixSort(device, 'portable'); break;
+      case 'gpu-subgroup':  this.sorter = new StableRadixSort(device, 'subgroup'); break;
+      case 'gpu-unstable':  this.sorter = new RadixSort(device); break;
+      default:              this.sorter = new CpuSort(device); break;
     }
   }
 

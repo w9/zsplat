@@ -370,7 +370,7 @@ export default function App() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>Stable Radix Sort Interactive Visualizer</CardTitle>
+            <CardTitle>GPU Stable Radix Sort Interactive Visualizer</CardTitle>
             <button
               type="button"
               className="w-fit rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"

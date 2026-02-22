@@ -1,5 +1,6 @@
 import type { Sorter } from './Sorter';
 import radixSortWGSL from '../shaders/radixSort.wgsl?raw';
+import radixSortSubgroupWGSL from '../shaders/radixSortSubgroup.wgsl?raw';
 
 const WG_SIZE = 256;
 const ELEMENTS_PER_THREAD = 16;
@@ -13,6 +14,8 @@ const NUM_PASSES = 4;
  * but replaces the scatter with a deterministic wave-based algorithm
  * that preserves element order within identical-digit buckets.
  */
+export type ScatterVariant = 'portable' | 'subgroup';
+
 export class StableRadixSort implements Sorter {
   private device: GPUDevice;
   private histogramPipeline!: GPUComputePipeline;
@@ -28,28 +31,48 @@ export class StableRadixSort implements Sorter {
   private passUniformBufs: GPUBuffer[] = [];
   private capacity = 0;
 
-  constructor(device: GPUDevice) {
+  /**
+   * @param device  GPU device
+   * @param variant 'portable' always uses the serial-rank scatter;
+   *                'subgroup' uses the subgroup-aware scatter if the device
+   *                supports it, otherwise falls back to portable.
+   */
+  constructor(device: GPUDevice, variant: ScatterVariant = 'portable') {
     this.device = device;
-    this.createPipelines();
+    this.createPipelines(variant);
   }
 
-  private createPipelines() {
-    const module = this.device.createShaderModule({ code: radixSortWGSL });
+  private createPipelines(variant: ScatterVariant) {
+    const baseModule = this.device.createShaderModule({ code: radixSortWGSL });
+    const hasSubgroups = this.device.features.has('subgroups' as GPUFeatureName);
+    const useSubgroup = variant === 'subgroup' && hasSubgroups;
+    if (variant === 'subgroup' && !hasSubgroups) {
+      console.warn('[StableRadixSort] subgroup scatter requested but device lacks "subgroups" feature; falling back to portable path.');
+    }
+    console.log(`[StableRadixSort] scatter path: ${useSubgroup ? 'subgroup' : 'portable'}`);
 
     this.histogramPipeline = this.device.createComputePipeline({
       layout: 'auto',
-      compute: { module, entryPoint: 'histogram' },
+      compute: { module: baseModule, entryPoint: 'histogram' },
     });
 
     this.prefixSumPipeline = this.device.createComputePipeline({
       layout: 'auto',
-      compute: { module, entryPoint: 'prefixSum' },
+      compute: { module: baseModule, entryPoint: 'prefixSum' },
     });
 
-    this.stableScatterPipeline = this.device.createComputePipeline({
-      layout: 'auto',
-      compute: { module, entryPoint: 'stableScatter' },
-    });
+    if (useSubgroup) {
+      const sgModule = this.device.createShaderModule({ code: radixSortSubgroupWGSL });
+      this.stableScatterPipeline = this.device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: sgModule, entryPoint: 'stableScatterSubgroup' },
+      });
+    } else {
+      this.stableScatterPipeline = this.device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: baseModule, entryPoint: 'stableScatter' },
+      });
+    }
 
     for (let i = 0; i < NUM_PASSES; i++) {
       this.passUniformBufs.push(
