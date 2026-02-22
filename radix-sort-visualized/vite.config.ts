@@ -5,10 +5,15 @@ import tailwindcss from "@tailwindcss/vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "./",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  build: {
+    outDir: path.resolve(__dirname, "../docs/radix-sort-visualized"),
+    emptyOutDir: true,
   },
 })

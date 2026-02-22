@@ -23,7 +23,7 @@ export function BufferStrip({
   name,
   values,
   metaValues = [],
-  role,
+  role: _role,
   digits = [],
   showBinary = false,
   bitOffset = null,

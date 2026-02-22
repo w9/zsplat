@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 export default defineConfig({
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -18,4 +19,8 @@ export default defineConfig({
   // Serve PLY files from the project root
   publicDir: resolve(__dirname, 'public'),
   assetsInclude: ['**/*.ply'],
+  build: {
+    outDir: resolve(__dirname, '../docs/playground'),
+    emptyOutDir: true,
+  },
 });

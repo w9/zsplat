@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && vite build",
+    "build:docs": "pnpm --dir playground build && pnpm --dir radix-sort-visualized build",
     "dev": "cd playground && vite",
     "preview": "cd playground && vite preview"
   },
