@@ -13,7 +13,7 @@ export function PassDots({ currentPass, numPasses }: PassDotsProps) {
           key={i}
           className={cn(
             "inline-block h-2.5 w-2.5 rounded-full",
-            i < currentPass ? "bg-green-500" : i === currentPass ? "bg-blue-500" : "bg-slate-300",
+            i < currentPass ? "bg-slate-700" : i === currentPass ? "bg-slate-500" : "bg-slate-300",
           )}
         />
       ))}

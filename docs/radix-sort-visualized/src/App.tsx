@@ -20,18 +20,18 @@ const EXPLANATIONS: Record<number, string> = {
   4: "Per-thread: prefix-sum kernel scans the flattened histBuf in place. Per-WG: no ownership, this step is global. Global: histBuf entries become exclusive starts used by scatter.",
   5: "Wave 0 pre-scatter: lanes load base offsets from histBuf into WG-local cumOffset[d]. No writes yet; all current cumOffset values are shown.",
   6: "Wave 0 scatter: each lane writes using cumOffset[d] + rank(lanes with same digit and smaller lid).",
-  7: "Wave 1 pre-scatter: cumOffset has advanced by wave 0 counts; all updated cumOffset values are shown before wave 1 writes.",
+  7: "Wave 1 pre-scatter: cumOffset is updated by adding wave-0 per-digit counts (from sharedDigits), so each digit points to its next free output slot before wave 1 writes.",
   8: "Wave 1 scatter: same deterministic rank rule, now using the updated cumOffset values.",
   9: "All waves complete: full stable scatter for this pass. Stability across WGs comes from non-overlapping prefix ranges in histBuf.",
   10: "Per-thread: done for this pass. Global: ping-pong swap makes keysOut/valsOut the next pass keysIn/valsIn.",
 }
 
 const IMPORTANT_CONSTANTS = [
-  { name: "WG_SIZE", value: VIZ_WG_SIZE, explanation: "Threads per workgroup." },
-  { name: "ELEMENTS_PER_THREAD", value: VIZ_ELEMENTS_PER_THREAD, explanation: "Elements processed per thread per pass." },
-  { name: "TILE_SIZE", value: VIZ_TILE_SIZE, explanation: "Elements owned by one workgroup." },
-  { name: "RADIX", value: RADIX, explanation: "Digit buckets per pass." },
-  { name: "NUM_PASSES", value: NUM_PASSES, explanation: "Total radix passes." },
+  { name: "WG_SIZE", value: VIZ_WG_SIZE, explanation: "Threads per workgroup. Real code value: 256." },
+  { name: "ELEMENTS_PER_THREAD", value: VIZ_ELEMENTS_PER_THREAD, explanation: "Elements processed per thread per pass. Real code value: 16." },
+  { name: "TILE_SIZE", value: VIZ_TILE_SIZE, explanation: "Elements owned by one workgroup. Real code value: 4096." },
+  { name: "RADIX", value: RADIX, explanation: "Digit buckets per pass. Real code value: 256." },
+  { name: "NUM_PASSES", value: NUM_PASSES, explanation: "Total radix passes. Real code value: 4." },
 ]
 
 function buildOutputDigits(length: number, moves: ScatterMove[] | null): number[] {
@@ -71,6 +71,7 @@ function getWaveScatterState(snapshot: Snapshot): {
   outputValues: Array<number | null>
   outputSourceByDest: Array<number | null>
   cumOffsets: number[][]
+  showActivity?: boolean
   activeFromIndices?: number[]
   activeDestIndices?: number[]
   processedFromIndices?: number[]
@@ -155,15 +156,20 @@ function getWaveScatterState(snapshot: Snapshot): {
     outputValues: (snapshot.outputValues ?? []).map((v) => v),
     outputSourceByDest: buildSourceByDest(snapshot.inputKeys.length, snapshot.scatterMap ?? []),
     cumOffsets: snapshot.cumOffsetInit ?? [],
+    showActivity: false,
   }
 }
 
-function renderStep(snapshot: Snapshot) {
+function renderStep(snapshot: Snapshot, hoveredWG: number | null, setHoveredWG: (wg: number | null) => void) {
   if (snapshot.stepName === "Sorted!" && snapshot.outputKeys && snapshot.outputValues) {
     return (
       <div className="space-y-4">
-        <BufferStrip name="sorted keys" values={snapshot.outputKeys} />
-        <BufferStrip name="sorted values" values={snapshot.outputValues} compact />
+        <BufferStrip
+          name="sorted keys"
+          values={snapshot.outputKeys}
+          metaValues={snapshot.outputValues}
+          showDigitLabel={false}
+        />
       </div>
     )
   }
@@ -182,26 +188,28 @@ function renderStep(snapshot: Snapshot) {
       name="keysIn"
       role="read"
       values={snapshot.inputKeys}
+      metaValues={values}
       digits={digits}
       bitOffset={bitOffset}
       showBinary
       workgroupTiles={subStep >= 1 ? (snapshot.workgroupTiles ?? []) : []}
+      showDigitLabel
+      highlightWorkgroup={hoveredWG}
+      onHoverWorkgroupChange={setHoveredWG}
     />,
   )
 
   if (subStep >= 2 && snapshot.localHistograms) {
-    snapshot.localHistograms.forEach((local, wg) => {
-      sections.push(
-        <BufferStrip
-          key={`wg-local-hist-${wg}`}
-          name={`WG${wg} localHist [d0,d1,d2,d3]`}
-          role="written"
-          values={local}
-          digits={[0, 1, 2, 3]}
-          compact
-        />,
-      )
-    })
+    sections.push(
+      <CumOffsetView
+        key="local-hist"
+        title="WG localHist [d0,d1,d2,d3]"
+        values={snapshot.localHistograms}
+        valueLabel="localHist[d]"
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
+      />,
+    )
   }
 
   if (subStep >= 3 && snapshot.histBufBefore) {
@@ -214,6 +222,9 @@ function renderStep(snapshot: Snapshot) {
         values={snapshot.histBufBefore}
         digits={histBufDigits}
         compact
+        getWorkgroupForIndex={(idx) => idx % numWGs}
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
       />,
     )
   }
@@ -228,19 +239,31 @@ function renderStep(snapshot: Snapshot) {
         values={snapshot.histBufAfter}
         digits={histBufDigits}
         compact
+        getWorkgroupForIndex={(idx) => idx % numWGs}
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
       />,
     )
   }
 
   const waveScatterState = getWaveScatterState(snapshot)
   if (waveScatterState) {
-    const wave0SharedDigits = subStep >= 5 && snapshot.waveDigits ? snapshot.waveDigits.map((wgWaves) => wgWaves[0] ?? []) : undefined
+    const sharedWave = subStep >= 7 ? 1 : 0
+    const sharedDigits =
+      subStep >= 5 && snapshot.waveDigits
+        ? snapshot.waveDigits.map((wgWaves) => {
+            const idx = Math.min(sharedWave, Math.max(0, wgWaves.length - 1))
+            return wgWaves[idx] ?? []
+          })
+        : undefined
     sections.push(
       <CumOffsetView
         key="cumoffset-scatter"
-        title="WG buffers (sharedDigits + cumOffset)"
+        title={`WG buffers (wave ${sharedWave} sharedDigits + cumOffset)`}
         values={waveScatterState.cumOffsets}
-        sharedDigits={wave0SharedDigits}
+        sharedDigits={sharedDigits}
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
       />,
     )
     sections.push(
@@ -259,10 +282,13 @@ function renderStep(snapshot: Snapshot) {
         numWGs={numWGs}
         tileSize={VIZ_TILE_SIZE}
         cumOffsets={waveScatterState.cumOffsets}
+        showActivity={waveScatterState.showActivity ?? true}
         activeFromIndices={waveScatterState.activeFromIndices}
         activeDestIndices={waveScatterState.activeDestIndices}
         processedFromIndices={waveScatterState.processedFromIndices}
         processedDestIndices={waveScatterState.processedDestIndices}
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
       />,
     )
   }
@@ -275,10 +301,17 @@ function renderStep(snapshot: Snapshot) {
         name="keysOut"
         role="written"
         values={snapshot.outputKeys}
+        metaValues={snapshot.outputValues}
         digits={outputDigits}
+        showDigitLabel={false}
+        getWorkgroupForIndex={(idx) => {
+          const sourceIndex = snapshot.outputValues?.[idx]
+          return sourceIndex == null ? Math.floor(idx / VIZ_TILE_SIZE) : Math.floor(sourceIndex / VIZ_TILE_SIZE)
+        }}
+        highlightWorkgroup={hoveredWG}
+        onHoverWorkgroupChange={setHoveredWG}
       />,
     )
-    sections.push(<BufferStrip key="valsOut" name="valsOut" role="written" values={snapshot.outputValues} compact />)
   }
 
   if (sections.length) {
@@ -293,6 +326,7 @@ export default function App() {
   const [inputText, setInputText] = useState("")
   const [randomCount, setRandomCount] = useState(12)
   const [currentStep, setCurrentStep] = useState(0)
+  const [hoveredWG, setHoveredWG] = useState<number | null>(null)
   const [showConstants, setShowConstants] = useState(false)
   const [shouldScrollBottom, setShouldScrollBottom] = useState(false)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -381,7 +415,7 @@ export default function App() {
               setCurrentStep(0)
             }}
           />
-          {renderStep(snapshot)}
+          {renderStep(snapshot, hoveredWG, setHoveredWG)}
           <ExplanationPanel
             stepTitle={snapshot.stepName}
             text={explanation}

@@ -10,13 +10,21 @@ function toBinary8(value: number): string {
 
 type ElementCardProps = {
   value: number
-  index?: number
+  metaValue?: number | null
   digit?: number | null
   bitOffset?: number | null
   compact?: boolean
+  showDigitLabel?: boolean
 }
 
-export function ElementCard({ value, index, digit = null, bitOffset = null, compact = false }: ElementCardProps) {
+export function ElementCard({
+  value,
+  metaValue = null,
+  digit = null,
+  bitOffset = null,
+  compact = false,
+  showDigitLabel = true,
+}: ElementCardProps) {
   const d = digit ?? -1
   const borderColor = d >= 0 ? DIGIT_COLORS[d] : "#cbd5e1"
   const bgColor = d >= 0 ? `${DIGIT_COLORS[d]}33` : "#ffffff"
@@ -30,8 +38,8 @@ export function ElementCard({ value, index, digit = null, bitOffset = null, comp
       )}
       style={{ borderColor, backgroundColor: bgColor }}
     >
-      {index != null && <div className="text-[10px] text-slate-500">#{index}</div>}
       <div className="text-lg font-semibold leading-none">{value}</div>
+      {metaValue != null && <div className="mt-1 text-[10px] text-slate-500">v={metaValue}</div>}
       {!compact && (
         <div className="mt-1 font-mono text-[10px] text-slate-600">
           {binary.split("").map((ch, i) => {
@@ -45,7 +53,7 @@ export function ElementCard({ value, index, digit = null, bitOffset = null, comp
           })}
         </div>
       )}
-      {d >= 0 && <div className="mt-1 text-[10px] font-semibold text-slate-700">d={d}</div>}
+      {showDigitLabel && d >= 0 && <div className="mt-1 text-[10px] font-semibold text-slate-700">d={d}</div>}
     </div>
   )
 }

@@ -22,6 +22,8 @@ type ScatterViewProps = {
   processedFromIndices?: number[]
   processedDestIndices?: number[]
   highlightWorkgroup?: number | null
+  onHoverWorkgroupChange?: (wg: number | null) => void
+  showActivity?: boolean
 }
 
 export function ScatterView({
@@ -43,6 +45,8 @@ export function ScatterView({
   processedFromIndices,
   processedDestIndices,
   highlightWorkgroup = null,
+  onHoverWorkgroupChange,
+  showActivity = true,
 }: ScatterViewProps) {
   const [hoveredWG, setHoveredWG] = useState<number | null>(null)
   const cardW = 76
@@ -78,6 +82,10 @@ export function ScatterView({
     const sourceIndex = outputSourceByDest[index]
     return sourceIndex == null ? cardWG(index) : Math.floor(sourceIndex / tileSize)
   }
+  const setHoverWG = (wg: number | null) => {
+    setHoveredWG(wg)
+    onHoverWorkgroupChange?.(wg)
+  }
   const effectiveHighlightWG = hoveredWG ?? highlightWorkgroup
   const isHighlightedWG = (wg: number) => effectiveHighlightWG == null || wg === effectiveHighlightWG
   const dimmedOpacity = 0.15
@@ -97,8 +105,8 @@ export function ScatterView({
                 background: isHighlightedWG(wg) ? "#e2e8f0" : "#f1f5f9",
                 opacity: isHighlightedWG(wg) ? 1 : 0.55,
               }}
-              onMouseEnter={() => setHoveredWG(wg)}
-              onMouseLeave={() => setHoveredWG(null)}
+              onMouseEnter={() => setHoverWG(wg)}
+              onMouseLeave={() => setHoverWG(null)}
             >
               WG{wg}: idx {start}-{Math.max(start, end)}
             </span>
@@ -108,30 +116,30 @@ export function ScatterView({
       <div className="overflow-x-auto overflow-y-visible py-1">
         <div className="space-y-1" style={{ width: `${plotW}px` }}>
           <div className="flex gap-2" style={{ paddingLeft: `${padX}px`, paddingRight: `${padX}px` }}>
-            {inputKeys.map((k, i) => (
-              (() => {
-                const isActive = activeFrom.has(i)
-                const isProcessed = !isActive && processedFrom.has(i)
-                return (
-              <div
-                key={`in-${i}`}
-                className="rounded-md border-2 px-2 py-1 text-center text-sm font-semibold"
-                style={{
-                  width: `${cardW}px`,
-                  borderColor: DIGIT_STROKE[digits[i]],
-                  background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
-                  opacity: isHighlightedWG(cardWG(i)) ? (isActive ? 1 : isProcessed ? 0.75 : 0.2) : dimmedOpacity,
-                  boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
-                }}
-                onMouseEnter={() => setHoveredWG(cardWG(i))}
-                onMouseLeave={() => setHoveredWG(null)}
-              >
-                {k}
-                <div className="text-[10px] text-slate-500">#{inputValues[i]}</div>
-              </div>
-                )
-              })()
-            ))}
+              {inputKeys.map((k, i) => (
+                (() => {
+                  const isActive = activeFrom.has(i)
+                  const isProcessed = !isActive && processedFrom.has(i)
+                  return (
+                <div
+                  key={`in-${i}`}
+                  className="rounded-md border-2 px-2 py-1 text-center text-sm font-semibold"
+                  style={{
+                    width: `${cardW}px`,
+                    borderColor: DIGIT_STROKE[digits[i]],
+                  background: showActivity && isActive ? `${DIGIT_STROKE[digits[i]]}55` : showActivity && isProcessed ? "#f8fafc" : "#ffffff",
+                  opacity: isHighlightedWG(cardWG(i)) ? (showActivity ? (isActive ? 1 : isProcessed ? 0.6 : 0.15) : 1) : dimmedOpacity,
+                  boxShadow: showActivity && isActive ? "0 0 0 3px rgba(15,23,42,0.28)" : "none",
+                  }}
+                  onMouseEnter={() => setHoverWG(cardWG(i))}
+                  onMouseLeave={() => setHoverWG(null)}
+                >
+                  {k}
+                  <div className="text-[10px] text-slate-500">v={inputValues[i]}</div>
+                </div>
+                  )
+                })()
+              ))}
           </div>
           <svg width={plotW} height={96} viewBox={`0 0 ${plotW} 96`} className="block">
             {connectors.map((m) => (
@@ -142,36 +150,44 @@ export function ScatterView({
                 strokeWidth={1.5}
                 fill="none"
                 opacity={isHighlightedWG(m.wg ?? cardWG(m.from)) ? 0.85 : 0.12}
-                onMouseEnter={() => setHoveredWG(m.wg ?? cardWG(m.from))}
-                onMouseLeave={() => setHoveredWG(null)}
+                onMouseEnter={() => setHoverWG(m.wg ?? cardWG(m.from))}
+                onMouseLeave={() => setHoverWG(null)}
               />
             ))}
           </svg>
           <div className="flex gap-2" style={{ paddingLeft: `${padX}px`, paddingRight: `${padX}px` }}>
-            {outputKeys.map((k, i) => (
-              (() => {
-                const isActive = activeDest.has(i)
-                const isProcessed = !isActive && (processedDest.has(i) || outputValues[i] != null)
-                return (
-              <div
-                key={`out-${i}`}
-                className="rounded-md border-2 bg-white px-2 py-1 text-center text-sm font-semibold"
-                style={{
-                  width: `${cardW}px`,
-                  borderColor: outputDigits[i] != null && outputDigits[i] >= 0 ? DIGIT_STROKE[outputDigits[i]] : "#cbd5e1",
-                  background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
-                  opacity: isHighlightedWG(outputCardWG(i)) ? (isActive ? 1 : isProcessed ? 0.75 : 0.2) : dimmedOpacity,
-                  boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
-                }}
-                onMouseEnter={() => setHoveredWG(outputCardWG(i))}
-                onMouseLeave={() => setHoveredWG(null)}
-              >
-                {k ?? "·"}
-                <div className="text-[10px] text-slate-500">{outputValues[i] == null ? "\u00A0" : `#${outputValues[i]}`}</div>
-              </div>
-                )
-              })()
-            ))}
+              {outputKeys.map((k, i) => (
+                (() => {
+                  const isActive = activeDest.has(i)
+                  const isProcessed = !isActive && (processedDest.has(i) || outputValues[i] != null)
+                  return (
+                <div
+                  key={`out-${i}`}
+                  className="rounded-md border-2 bg-white px-2 py-1 text-center text-sm font-semibold"
+                  style={{
+                    width: `${cardW}px`,
+                    borderColor: outputDigits[i] != null && outputDigits[i] >= 0 ? DIGIT_STROKE[outputDigits[i]] : "#cbd5e1",
+                  background: showActivity
+                    ? isActive && outputDigits[i] != null && outputDigits[i] >= 0
+                      ? `${DIGIT_STROKE[outputDigits[i]]}55`
+                      : isActive
+                        ? "#f8fafc"
+                        : isProcessed
+                          ? "#f8fafc"
+                          : "#ffffff"
+                    : "#ffffff",
+                  opacity: isHighlightedWG(outputCardWG(i)) ? (showActivity ? (isActive ? 1 : isProcessed ? 0.6 : 0.15) : 1) : dimmedOpacity,
+                  boxShadow: showActivity && isActive ? "0 0 0 3px rgba(15,23,42,0.28)" : "none",
+                  }}
+                  onMouseEnter={() => setHoverWG(outputCardWG(i))}
+                  onMouseLeave={() => setHoverWG(null)}
+                >
+                  {k ?? "·"}
+                  <div className="text-[10px] text-slate-500">{outputValues[i] == null ? "\u00A0" : `v=${outputValues[i]}`}</div>
+                </div>
+                  )
+                })()
+              ))}
           </div>
           {stackedTicks.length > 0 && (
             <div className="relative mt-1" style={{ height: `${maxStack * tickRowH + 11}px` }}>
@@ -184,8 +200,8 @@ export function ScatterView({
                     top: `${tick.stack * tickRowH}px`,
                     opacity: isHighlightedWG(tick.wg) ? 1 : 0.2,
                   }}
-                  onMouseEnter={() => setHoveredWG(tick.wg)}
-                  onMouseLeave={() => setHoveredWG(null)}
+                  onMouseEnter={() => setHoverWG(tick.wg)}
+                  onMouseLeave={() => setHoverWG(null)}
                 >
                   <div className="mx-auto h-2 w-px bg-slate-500" />
                   <div
@@ -195,7 +211,7 @@ export function ScatterView({
                       backgroundColor: `${DIGIT_STROKE[tick.digit]}33`,
                     }}
                   >
-                    WG{tick.wg} d{tick.digit}
+                    WG{tick.wg} d={tick.digit}
                   </div>
                 </div>
               ))}

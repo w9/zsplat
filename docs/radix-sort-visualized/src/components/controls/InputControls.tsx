@@ -23,6 +23,12 @@ export function InputControls({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            onApply()
+          }
+        }}
         placeholder="e.g. 42, 17, 5, 93, 28..."
         className="min-w-80 flex-1 bg-white"
       />
