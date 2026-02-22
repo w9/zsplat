@@ -5,8 +5,8 @@ import radixSortSubgroupWGSL from '../shaders/radixSortSubgroup.wgsl?raw';
 const WG_SIZE = 256;
 const ELEMENTS_PER_THREAD = 16;
 const TILE_SIZE = WG_SIZE * ELEMENTS_PER_THREAD; // 4096
-const RADIX = 256;
-const NUM_PASSES = 4;
+const RADIX = 16;
+const NUM_PASSES = 8;
 
 /**
  * Stable GPU Radix Sort.
@@ -146,7 +146,7 @@ export class StableRadixSort implements Sorter {
     const numElementWGs = Math.ceil(numElements / WG_SIZE);
 
     for (let pass = 0; pass < NUM_PASSES; pass++) {
-      const data = new Uint32Array([numElements, pass * 8, numWGs, pass === 0 ? 1 : 0]);
+      const data = new Uint32Array([numElements, pass * 4, numWGs, pass === 0 ? 1 : 0]);
       this.device.queue.writeBuffer(this.passUniformBufs[pass], 0, data);
     }
 

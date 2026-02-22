@@ -9,7 +9,7 @@
 enable subgroups;
 
 const WG_SIZE: u32 = 256u;
-const RADIX: u32 = 256u;
+const RADIX: u32 = 16u;
 const ELEMENTS_PER_THREAD: u32 = 16u;
 const TILE_SIZE: u32 = 4096u;
 
@@ -37,7 +37,11 @@ fn stableScatterSubgroup(
   @builtin(local_invocation_id)   lid: vec3<u32>,
   @builtin(subgroup_size)         subgroupSize: u32,
 ) {
-  cumOffset[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  if (lid.x < RADIX) {
+    cumOffset[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  } else {
+    cumOffset[lid.x] = 0u;
+  }
   atomicStore(&subgroupDigitCounts[lid.x], 0u);
   workgroupBarrier();
 
@@ -54,7 +58,7 @@ fn stableScatterSubgroup(
     if (i < su.numElements) {
       myKey = keysIn[i];
       myVal = select(valsIn[i], i, su.isFirstPass != 0u);
-      myDigit = (myKey >> su.bitOffset) & 0xFFu;
+      myDigit = (myKey >> su.bitOffset) & 0xFu;
     }
 
     sharedDigits[lid.x] = myDigit;

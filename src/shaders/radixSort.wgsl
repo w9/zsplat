@@ -12,7 +12,7 @@
 // ============================================================
 
 const WG_SIZE: u32 = 256u;
-const RADIX: u32 = 256u;           // 2^8 = 256 bins per pass
+const RADIX: u32 = 16u;            // 2^4 = 16 bins per pass
 const ELEMENTS_PER_THREAD: u32 = 16u;
 const TILE_SIZE: u32 = 4096u;      // WG_SIZE * ELEMENTS_PER_THREAD
 
@@ -51,7 +51,7 @@ fn histogram(
     let i = tileStart + lid.x * ELEMENTS_PER_THREAD + t;
     if (i < su.numElements) {
       let key = keysIn[i];
-      let digit = (key >> su.bitOffset) & 0xFFu;
+      let digit = (key >> su.bitOffset) & 0xFu;
       atomicAdd(&localHist[digit], 1u);
     }
   }
@@ -60,7 +60,9 @@ fn histogram(
 
   // Write local histogram to global buffer
   // Layout: histBuf[digit * numWGs + wgid]
-  histBuf[lid.x * su.numWGs + wgid.x] = atomicLoad(&localHist[lid.x]);
+  if (lid.x < RADIX) {
+    histBuf[lid.x * su.numWGs + wgid.x] = atomicLoad(&localHist[lid.x]);
+  }
 }
 
 // ---- Prefix Sum ----
@@ -142,7 +144,9 @@ fn scatter(
   @builtin(workgroup_id)          wgid: vec3<u32>,
   @builtin(local_invocation_id)   lid: vec3<u32>,
 ) {
-  atomicStore(&localOffsets[lid.x], histBuf[lid.x * su.numWGs + wgid.x]);
+  if (lid.x < RADIX) {
+    atomicStore(&localOffsets[lid.x], histBuf[lid.x * su.numWGs + wgid.x]);
+  }
   workgroupBarrier();
 
   let tileStart = wgid.x * TILE_SIZE;
@@ -152,7 +156,7 @@ fn scatter(
     if (i < su.numElements) {
       let key = keysIn[i];
       let val = select(valsIn[i], i, su.isFirstPass != 0u);
-      let digit = (key >> su.bitOffset) & 0xFFu;
+      let digit = (key >> su.bitOffset) & 0xFu;
       let dest = atomicAdd(&localOffsets[digit], 1u);
       keysOut[dest] = key;
       valsOut[dest] = val;
@@ -176,7 +180,11 @@ fn stableScatter(
   @builtin(local_invocation_id)   lid: vec3<u32>,
 ) {
   // Load this workgroup's global prefix-sum offsets per digit
-  cumOffset[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  if (lid.x < RADIX) {
+    cumOffset[lid.x] = histBuf[lid.x * su.numWGs + wgid.x];
+  } else {
+    cumOffset[lid.x] = 0u;
+  }
   workgroupBarrier();
 
   let tileStart = wgid.x * TILE_SIZE;
@@ -192,7 +200,7 @@ fn stableScatter(
     if (i < su.numElements) {
       myKey = keysIn[i];
       myVal = select(valsIn[i], i, su.isFirstPass != 0u);
-      myDigit = (myKey >> su.bitOffset) & 0xFFu;
+      myDigit = (myKey >> su.bitOffset) & 0xFu;
     }
 
     // Publish digit so all threads can see each other's digits
@@ -257,7 +265,7 @@ fn stableBlockSum(
     var myDigit = RADIX;
     if (i < su.numElements) {
       let key = keysIn[i];
-      myDigit = (key >> su.bitOffset) & 0xFFu;
+      myDigit = (key >> su.bitOffset) & 0xFu;
     }
 
     sharedDigits[lid.x] = myDigit;
@@ -300,7 +308,9 @@ fn stableBlockSum(
   }
 
   // Write final per-WG histogram to global histBuf
-  histBuf[lid.x * su.numWGs + wgid.x] = atomicLoad(&localHist[lid.x]);
+  if (lid.x < RADIX) {
+    histBuf[lid.x * su.numWGs + wgid.x] = atomicLoad(&localHist[lid.x]);
+  }
 }
 
 // ---- Stable Reorder ----
@@ -317,7 +327,7 @@ fn stableReorder(
 
   let key = keysIn[i];
   let val = select(valsIn[i], i, su.isFirstPass != 0u);
-  let digit = (key >> su.bitOffset) & 0xFFu;
+  let digit = (key >> su.bitOffset) & 0xFu;
   let localPrefix = localPrefixBuf[i];
   // histBuf stores per-source-workgroup offsets; reorder dispatch workgroups
   // are independent, so derive source WG from element index.
