@@ -1,3 +1,4 @@
+import { useState } from "react"
 import type { ScatterMove } from "@/types/radix"
 
 const DIGIT_STROKE = ["#a6cee3", "#1f78b4", "#b2df8a", "#33a02c"]
@@ -8,6 +9,7 @@ type ScatterViewProps = {
   digits: number[]
   outputKeys: Array<number | null>
   outputValues: Array<number | null>
+  outputSourceByDest?: Array<number | null>
   outputDigits?: number[]
   scatterMap: ScatterMove[]
   connectorMap?: ScatterMove[]
@@ -19,6 +21,7 @@ type ScatterViewProps = {
   activeDestIndices?: number[]
   processedFromIndices?: number[]
   processedDestIndices?: number[]
+  highlightWorkgroup?: number | null
 }
 
 export function ScatterView({
@@ -27,6 +30,7 @@ export function ScatterView({
   digits,
   outputKeys,
   outputValues,
+  outputSourceByDest = [],
   outputDigits = [],
   scatterMap,
   connectorMap,
@@ -38,7 +42,9 @@ export function ScatterView({
   activeDestIndices,
   processedFromIndices,
   processedDestIndices,
+  highlightWorkgroup = null,
 }: ScatterViewProps) {
+  const [hoveredWG, setHoveredWG] = useState<number | null>(null)
   const cardW = 76
   const gap = 8
   const totalW = inputKeys.length * (cardW + gap) - gap
@@ -67,6 +73,14 @@ export function ScatterView({
   })
   const maxStack = stackedTicks.reduce((m, t) => Math.max(m, t.stack + 1), 0)
   const tickRowH = 30
+  const cardWG = (index: number) => Math.floor(index / tileSize)
+  const outputCardWG = (index: number) => {
+    const sourceIndex = outputSourceByDest[index]
+    return sourceIndex == null ? cardWG(index) : Math.floor(sourceIndex / tileSize)
+  }
+  const effectiveHighlightWG = hoveredWG ?? highlightWorkgroup
+  const isHighlightedWG = (wg: number) => effectiveHighlightWG == null || wg === effectiveHighlightWG
+  const dimmedOpacity = 0.15
 
   return (
     <div className="space-y-2">
@@ -76,7 +90,16 @@ export function ScatterView({
           const start = wg * tileSize
           const end = Math.min(start + tileSize, inputKeys.length) - 1
           return (
-            <span key={`wg-${wg}`} className="rounded bg-slate-100 px-2 py-0.5">
+            <span
+              key={`wg-${wg}`}
+              className="rounded px-2 py-0.5"
+              style={{
+                background: isHighlightedWG(wg) ? "#e2e8f0" : "#f1f5f9",
+                opacity: isHighlightedWG(wg) ? 1 : 0.55,
+              }}
+              onMouseEnter={() => setHoveredWG(wg)}
+              onMouseLeave={() => setHoveredWG(null)}
+            >
               WG{wg}: idx {start}-{Math.max(start, end)}
             </span>
           )
@@ -97,9 +120,11 @@ export function ScatterView({
                   width: `${cardW}px`,
                   borderColor: DIGIT_STROKE[digits[i]],
                   background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
-                  opacity: isActive ? 1 : isProcessed ? 0.75 : 0.2,
+                  opacity: isHighlightedWG(cardWG(i)) ? (isActive ? 1 : isProcessed ? 0.75 : 0.2) : dimmedOpacity,
                   boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
                 }}
+                onMouseEnter={() => setHoveredWG(cardWG(i))}
+                onMouseLeave={() => setHoveredWG(null)}
               >
                 {k}
                 <div className="text-[10px] text-slate-500">#{inputValues[i]}</div>
@@ -116,7 +141,9 @@ export function ScatterView({
                 stroke={DIGIT_STROKE[m.digit]}
                 strokeWidth={1.5}
                 fill="none"
-                opacity={0.85}
+                opacity={isHighlightedWG(m.wg ?? cardWG(m.from)) ? 0.85 : 0.12}
+                onMouseEnter={() => setHoveredWG(m.wg ?? cardWG(m.from))}
+                onMouseLeave={() => setHoveredWG(null)}
               />
             ))}
           </svg>
@@ -133,9 +160,11 @@ export function ScatterView({
                   width: `${cardW}px`,
                   borderColor: outputDigits[i] != null && outputDigits[i] >= 0 ? DIGIT_STROKE[outputDigits[i]] : "#cbd5e1",
                   background: isActive ? "#f8fafc" : isProcessed ? "#f8fafc" : "#ffffff",
-                  opacity: isActive ? 1 : isProcessed ? 0.75 : 0.2,
+                  opacity: isHighlightedWG(outputCardWG(i)) ? (isActive ? 1 : isProcessed ? 0.75 : 0.2) : dimmedOpacity,
                   boxShadow: isActive ? "0 0 0 2px rgba(15,23,42,0.12)" : "none",
                 }}
+                onMouseEnter={() => setHoveredWG(outputCardWG(i))}
+                onMouseLeave={() => setHoveredWG(null)}
               >
                 {k ?? "·"}
                 <div className="text-[10px] text-slate-500">{outputValues[i] == null ? "\u00A0" : `#${outputValues[i]}`}</div>
@@ -150,7 +179,13 @@ export function ScatterView({
                 <div
                   key={`tick-${tick.wg}-${tick.digit}-${tick.stack}`}
                   className="absolute -translate-x-1/2 text-[10px] text-slate-600"
-                  style={{ left: `${tickX(tick.index)}px`, top: `${tick.stack * tickRowH}px` }}
+                  style={{
+                    left: `${tickX(tick.index)}px`,
+                    top: `${tick.stack * tickRowH}px`,
+                    opacity: isHighlightedWG(tick.wg) ? 1 : 0.2,
+                  }}
+                  onMouseEnter={() => setHoveredWG(tick.wg)}
+                  onMouseLeave={() => setHoveredWG(null)}
                 >
                   <div className="mx-auto h-2 w-px bg-slate-500" />
                   <div

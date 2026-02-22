@@ -2,6 +2,7 @@ import { type ReactElement, useEffect, useMemo, useRef, useState } from "react"
 import { InputControls } from "@/components/controls/InputControls"
 import { StepControls } from "@/components/controls/StepControls"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { BufferStrip } from "@/components/viz/BufferStrip"
 import { CumOffsetView } from "@/components/viz/CumOffsetView"
 import { ExplanationPanel } from "@/components/viz/ExplanationPanel"
@@ -50,6 +51,12 @@ function buildPartialOutputsFromMoves(inputKeys: number[], inputValues: number[]
   return { keys, values }
 }
 
+function buildSourceByDest(length: number, moves: ScatterMove[]): Array<number | null> {
+  const out = new Array<number | null>(length).fill(null)
+  for (const m of moves) out[m.dest] = m.from
+  return out
+}
+
 function buildWaveInputIndices(length: number, numWGs: number, wave: number): number[] {
   return Array.from({ length: numWGs }, (_, wg) => Array.from({ length: VIZ_WG_SIZE }, (_, lid) => wg * VIZ_TILE_SIZE + wave * VIZ_WG_SIZE + lid))
     .flat()
@@ -62,6 +69,7 @@ function getWaveScatterState(snapshot: Snapshot): {
   connectors?: ScatterMove[]
   outputKeys: Array<number | null>
   outputValues: Array<number | null>
+  outputSourceByDest: Array<number | null>
   cumOffsets: number[][]
   activeFromIndices?: number[]
   activeDestIndices?: number[]
@@ -79,6 +87,7 @@ function getWaveScatterState(snapshot: Snapshot): {
       connectors: [],
       outputKeys: new Array(snapshot.inputKeys.length).fill(null),
       outputValues: new Array(snapshot.inputValues.length).fill(null),
+      outputSourceByDest: new Array(snapshot.inputKeys.length).fill(null),
       cumOffsets: snapshot.cumOffsetInit ?? [],
       activeFromIndices,
     }
@@ -95,6 +104,7 @@ function getWaveScatterState(snapshot: Snapshot): {
       connectors: moves,
       outputKeys: partial.keys,
       outputValues: partial.values,
+      outputSourceByDest: buildSourceByDest(snapshot.inputKeys.length, moves),
       cumOffsets: snapshot.cumOffsetInit ?? [],
     }
   }
@@ -110,6 +120,7 @@ function getWaveScatterState(snapshot: Snapshot): {
       connectors: [],
       outputKeys: snapshot.partialOutputKeys ?? new Array(snapshot.inputKeys.length).fill(null),
       outputValues: snapshot.partialOutputValues ?? new Array(snapshot.inputValues.length).fill(null),
+      outputSourceByDest: buildSourceByDest(snapshot.inputKeys.length, wave0Moves),
       cumOffsets: snapshot.cumOffsetAfterWave?.[0] ?? snapshot.cumOffsetInit ?? [],
       activeFromIndices,
       processedFromIndices,
@@ -127,6 +138,7 @@ function getWaveScatterState(snapshot: Snapshot): {
       connectors: wave1,
       outputKeys: snapshot.partialOutputKeys ?? new Array(snapshot.inputKeys.length).fill(null),
       outputValues: snapshot.partialOutputValues ?? new Array(snapshot.inputValues.length).fill(null),
+      outputSourceByDest: buildSourceByDest(snapshot.inputKeys.length, moves),
       cumOffsets: snapshot.cumOffsetAfterWave?.[0] ?? snapshot.cumOffsetInit ?? [],
       activeFromIndices: wave1.map((m) => m.from),
       activeDestIndices: wave1.map((m) => m.dest),
@@ -141,6 +153,7 @@ function getWaveScatterState(snapshot: Snapshot): {
     connectors: snapshot.scatterMap ?? [],
     outputKeys: (snapshot.outputKeys ?? []).map((v) => v),
     outputValues: (snapshot.outputValues ?? []).map((v) => v),
+    outputSourceByDest: buildSourceByDest(snapshot.inputKeys.length, snapshot.scatterMap ?? []),
     cumOffsets: snapshot.cumOffsetInit ?? [],
   }
 }
@@ -239,6 +252,7 @@ function renderStep(snapshot: Snapshot) {
         digits={digits}
         outputKeys={waveScatterState.outputKeys}
         outputValues={waveScatterState.outputValues}
+        outputSourceByDest={waveScatterState.outputSourceByDest}
         outputDigits={buildOutputDigits(snapshot.inputKeys.length, waveScatterState.moves)}
         scatterMap={waveScatterState.moves}
         connectorMap={waveScatterState.connectors}
@@ -335,12 +349,17 @@ export default function App() {
           {showConstants && (
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
               {IMPORTANT_CONSTANTS.map((item) => (
-                <span key={item.name} className="inline-flex items-center gap-2">
-                  <span className="font-mono text-[11px] font-semibold text-slate-800">
-                    {item.name}={item.value}
-                  </span>
-                  <span className="ml-2">{item.explanation}</span>
-                </span>
+                <Tooltip key={item.name}>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="cursor-help font-mono text-[11px] font-semibold text-slate-800 underline decoration-dotted underline-offset-4"
+                      aria-label={`${item.name} equals ${item.value}. ${item.explanation}`}
+                    >
+                      {item.name}={item.value}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{item.explanation}</TooltipContent>
+                </Tooltip>
               ))}
             </div>
           )}
