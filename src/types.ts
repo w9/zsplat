@@ -72,6 +72,8 @@ export interface ZSplatProps {
   turntable?: boolean;
   /** Enable GPU pick for hovered splat index. Default false. */
   hoverEnabled?: boolean;
+  /** Left-drag: 'orbit' = rotate around target, 'fly' = look around in place. Default 'orbit'. */
+  cameraControlMode?: 'orbit' | 'fly';
   onLoad?: (info: { numSplats: number; splatData?: SplatData }) => void;
   onError?: (err: Error) => void;
   onStats?: (stats: SplatStats) => void;

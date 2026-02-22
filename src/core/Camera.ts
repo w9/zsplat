@@ -15,6 +15,7 @@ export class Camera {
   private vRadius = 0;
   private vPanX = 0;
   private vPanY = 0;
+  private vPanForward = 0;
 
   /** Radians per frame for automatic orbit (turntable). 0 = off. */
   turntableSpeed = 0;
@@ -26,6 +27,7 @@ export class Camera {
 
   private canvas: HTMLCanvasElement | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
+  private keysDown = new Set<string>();
   private lastPinchDist = 0;
   private dirty = true;
 
@@ -34,11 +36,24 @@ export class Camera {
   private _viewProj = new Float32Array(16);
   private _position: [number, number, number] = [0, 0, 0];
 
+  /** Stored initial pose (set in constructor and by fitToBounds) for R = reset */
+  private initialTarget: [number, number, number];
+  private initialTheta: number;
+  private initialPhi: number;
+  private initialRadius: number;
+
+  /** 'orbit' = drag orbits camera around target; 'fly' = drag rotates view in place. */
+  private controlMode: 'orbit' | 'fly' = 'orbit';
+  /** In fly mode: camera position. In orbit mode: null. */
+  private _flyPosition: [number, number, number] | null = null;
+
   // Bound handlers for cleanup
   private onPointerDownBound: (e: PointerEvent) => void;
   private onPointerMoveBound: (e: PointerEvent) => void;
   private onPointerUpBound: (e: PointerEvent) => void;
   private onWheelBound: (e: WheelEvent) => void;
+  private onKeyDownBound: (e: KeyboardEvent) => void;
+  private onKeyUpBound: (e: KeyboardEvent) => void;
 
   constructor(options?: {
     position?: [number, number, number];
@@ -61,19 +76,29 @@ export class Camera {
     this.phi = Math.acos(Math.max(-1, Math.min(1, dy / this.radius)));
     this.theta = Math.atan2(dx, dz);
 
+    this.initialTarget = [...this.target];
+    this.initialTheta = this.theta;
+    this.initialPhi = this.phi;
+    this.initialRadius = this.radius;
+
     this.onPointerDownBound = this.onPointerDown.bind(this);
     this.onPointerMoveBound = this.onPointerMove.bind(this);
     this.onPointerUpBound = this.onPointerUp.bind(this);
     this.onWheelBound = this.onWheel.bind(this);
+    this.onKeyDownBound = this.onKeyDown.bind(this);
+    this.onKeyUpBound = this.onKeyUp.bind(this);
   }
 
   attach(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
+    canvas.tabIndex = 0;
     canvas.addEventListener('pointerdown', this.onPointerDownBound);
     canvas.addEventListener('pointermove', this.onPointerMoveBound);
     canvas.addEventListener('pointerup', this.onPointerUpBound);
     canvas.addEventListener('pointercancel', this.onPointerUpBound);
     canvas.addEventListener('wheel', this.onWheelBound, { passive: false });
+    canvas.addEventListener('keydown', this.onKeyDownBound);
+    canvas.addEventListener('keyup', this.onKeyUpBound);
     canvas.style.touchAction = 'none';
   }
 
@@ -84,6 +109,9 @@ export class Camera {
     this.canvas.removeEventListener('pointerup', this.onPointerUpBound);
     this.canvas.removeEventListener('pointercancel', this.onPointerUpBound);
     this.canvas.removeEventListener('wheel', this.onWheelBound);
+    this.canvas.removeEventListener('keydown', this.onKeyDownBound);
+    this.canvas.removeEventListener('keyup', this.onKeyUpBound);
+    this.keysDown.clear();
     this.canvas = null;
   }
 
@@ -92,10 +120,34 @@ export class Camera {
     this.dirty = true;
   }
 
+  setControlMode(mode: 'orbit' | 'fly'): void {
+    if (this.controlMode === mode) return;
+    this.controlMode = mode;
+    if (mode === 'fly') {
+      this._flyPosition = [...this._position];
+    } else {
+      this._flyPosition = null;
+    }
+    this.dirty = true;
+  }
+
   /** Call once per frame to apply damping and update matrices. Returns true if changed. */
   update(): boolean {
     const damping = 0.85;
     const threshold = 1e-5;
+
+    // WASD + Q/E keyboard pan: Shift = 10x slower, Alt/Cmd = 10x faster
+    const keySpeed = this.radius * 0.004;
+    let speedMul = 1;
+    if (this.keysDown.has('shift')) speedMul *= 0.1;
+    if (this.keysDown.has('alt') || this.keysDown.has('meta')) speedMul *= 10;
+    const step = keySpeed * speedMul;
+    if (this.keysDown.has('w')) { this.vPanForward += step; this.dirty = true; }
+    if (this.keysDown.has('s')) { this.vPanForward -= step; this.dirty = true; }
+    if (this.keysDown.has('a')) { this.vPanX += step; this.dirty = true; }
+    if (this.keysDown.has('d')) { this.vPanX -= step; this.dirty = true; }
+    if (this.keysDown.has('q')) { this.vPanY -= step; this.dirty = true; }
+    if (this.keysDown.has('e')) { this.vPanY += step; this.dirty = true; }
 
     this.theta += this.vTheta;
     if (this.turntableSpeed !== 0) {
@@ -105,13 +157,36 @@ export class Camera {
     this.phi += this.vPhi;
     this.radius += this.vRadius;
 
-    // Pan in camera-space
-    if (Math.abs(this.vPanX) > threshold || Math.abs(this.vPanY) > threshold) {
+    // Pan in camera-space (right, up, and view direction)
+    if (
+      Math.abs(this.vPanX) > threshold ||
+      Math.abs(this.vPanY) > threshold ||
+      Math.abs(this.vPanForward) > threshold
+    ) {
       const right = this.getRightDir();
       const up = this.getUpDir();
-      this.target[0] += right[0] * this.vPanX + up[0] * this.vPanY;
-      this.target[1] += right[1] * this.vPanX + up[1] * this.vPanY;
-      this.target[2] += right[2] * this.vPanX + up[2] * this.vPanY;
+      const viewDir = this.getViewDir();
+      const dx =
+        right[0] * this.vPanX +
+        up[0] * this.vPanY +
+        viewDir[0] * this.vPanForward;
+      const dy =
+        right[1] * this.vPanX +
+        up[1] * this.vPanY +
+        viewDir[1] * this.vPanForward;
+      const dz =
+        right[2] * this.vPanX +
+        up[2] * this.vPanY +
+        viewDir[2] * this.vPanForward;
+      if (this.controlMode === 'fly' && this._flyPosition) {
+        this._flyPosition[0] += dx;
+        this._flyPosition[1] += dy;
+        this._flyPosition[2] += dz;
+      } else {
+        this.target[0] += dx;
+        this.target[1] += dy;
+        this.target[2] += dz;
+      }
       this.dirty = true;
     }
 
@@ -120,6 +195,7 @@ export class Camera {
     this.vRadius *= damping;
     this.vPanX *= damping;
     this.vPanY *= damping;
+    this.vPanForward *= damping;
 
     // Clamp
     this.phi = Math.max(0.01, Math.min(Math.PI - 0.01, this.phi));
@@ -130,7 +206,8 @@ export class Camera {
       Math.abs(this.vPhi) > threshold ||
       Math.abs(this.vRadius) > threshold ||
       Math.abs(this.vPanX) > threshold ||
-      Math.abs(this.vPanY) > threshold;
+      Math.abs(this.vPanY) > threshold ||
+      Math.abs(this.vPanForward) > threshold;
 
     if (anyVelocity || this.dirty) {
       this.dirty = false;
@@ -196,26 +273,63 @@ export class Camera {
     this.theta = Math.PI * 0.25;
     this.near = Math.max(0.01, extent / 200);
     this.far = extent * 20;
-    this.vTheta = this.vPhi = this.vRadius = this.vPanX = this.vPanY = 0;
+    this.vTheta = this.vPhi = this.vRadius = this.vPanX = this.vPanY = this.vPanForward = 0;
+    this.initialTarget = [...this.target];
+    this.initialTheta = this.theta;
+    this.initialPhi = this.phi;
+    this.initialRadius = this.radius;
+    this.syncFlyPositionFromOrbit();
     this.dirty = true;
+  }
+
+  /** Reset camera to the stored initial pose (R key). */
+  resetToInitial(): void {
+    this.target = [...this.initialTarget];
+    this.theta = this.initialTheta;
+    this.phi = this.initialPhi;
+    this.radius = this.initialRadius;
+    this.vTheta = this.vPhi = this.vRadius = this.vPanX = this.vPanY = this.vPanForward = 0;
+    this.syncFlyPositionFromOrbit();
+    this.dirty = true;
+  }
+
+  /** Set _flyPosition from current target/theta/phi/radius so fly mode matches. */
+  private syncFlyPositionFromOrbit(): void {
+    if (this.controlMode !== 'fly') return;
+    const sp = Math.sin(this.phi);
+    const cp = Math.cos(this.phi);
+    const st = Math.sin(this.theta);
+    const ct = Math.cos(this.theta);
+    if (!this._flyPosition) this._flyPosition = [0, 0, 0];
+    this._flyPosition[0] = this.target[0] + this.radius * sp * st;
+    this._flyPosition[1] = this.target[1] + this.radius * cp;
+    this._flyPosition[2] = this.target[2] + this.radius * sp * ct;
   }
 
   // ---- private ----
 
   private rebuildMatrices(): void {
-    // Position from spherical coords
     const sp = Math.sin(this.phi);
     const cp = Math.cos(this.phi);
     const st = Math.sin(this.theta);
     const ct = Math.cos(this.theta);
+    const dirX = sp * st;
+    const dirY = cp;
+    const dirZ = sp * ct;
 
-    this._position = [
-      this.target[0] + this.radius * sp * st,
-      this.target[1] + this.radius * cp,
-      this.target[2] + this.radius * sp * ct,
-    ];
+    if (this.controlMode === 'fly' && this._flyPosition) {
+      this._position[0] = this._flyPosition[0];
+      this._position[1] = this._flyPosition[1];
+      this._position[2] = this._flyPosition[2];
+      this.target[0] = this._position[0] - this.radius * dirX;
+      this.target[1] = this._position[1] - this.radius * dirY;
+      this.target[2] = this._position[2] - this.radius * dirZ;
+    } else {
+      this._position[0] = this.target[0] + this.radius * dirX;
+      this._position[1] = this.target[1] + this.radius * dirY;
+      this._position[2] = this.target[2] + this.radius * dirZ;
+    }
 
-    // View matrix (lookAt)
     lookAt(this._view, this._position, this.target, [0, 1, 0]);
 
     // Projection matrix
@@ -232,6 +346,18 @@ export class Camera {
 
   private getUpDir(): [number, number, number] {
     return [this._view[1], this._view[5], this._view[9]];
+  }
+
+  /** View direction from camera to target (normalized). */
+  private getViewDir(): [number, number, number] {
+    let zx = this.target[0] - this._position[0];
+    let zy = this.target[1] - this._position[1];
+    let zz = this.target[2] - this._position[2];
+    const len = Math.hypot(zx, zy, zz) || 1;
+    zx /= len;
+    zy /= len;
+    zz /= len;
+    return [zx, zy, zz];
   }
 
   // ---- event handlers ----
@@ -294,6 +420,19 @@ export class Camera {
     e.preventDefault();
     this.vRadius += e.deltaY * this.radius * 0.001;
     this.dirty = true;
+  }
+
+  private onKeyDown(e: KeyboardEvent): void {
+    const key = e.key.toLowerCase();
+    if (key === 'r') {
+      this.resetToInitial();
+      return;
+    }
+    this.keysDown.add(key);
+  }
+
+  private onKeyUp(e: KeyboardEvent): void {
+    this.keysDown.delete(e.key.toLowerCase());
   }
 }
 

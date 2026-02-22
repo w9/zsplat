@@ -18,7 +18,7 @@ import { loadRad, isRadFile } from './loaders/rad-loader';
  */
 const TURNTABLE_SPEED = 0.004; // radians per frame (~full rotation in ~25s at 60fps)
 
-export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, hoverEnabled = false, onLoad, onError, onStats }: ZSplatProps) {
+export function ZSplat({ src, style, className, camera, shEnabled = true, turntable = false, hoverEnabled = false, cameraControlMode = 'orbit', onLoad, onError, onStats }: ZSplatProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SplatRenderer | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
@@ -45,6 +45,13 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
       rendererRef.current.pickEnabled = hoverEnabled;
     }
   }, [hoverEnabled]);
+
+  // Sync camera control mode (orbit vs fly)
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.setCameraControlMode(cameraControlMode);
+    }
+  }, [cameraControlMode]);
 
   const handleError = useCallback(
     (err: unknown) => {

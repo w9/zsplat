@@ -81,6 +81,10 @@ export class SplatRenderer {
     this.sortMethod = options?.sort ?? 'cpu';
   }
 
+  setCameraControlMode(mode: 'orbit' | 'fly'): void {
+    this.camera.setControlMode(mode);
+  }
+
   async init(canvas: HTMLCanvasElement): Promise<void> {
     await this.gpu.init(canvas);
     const device = this.gpu.device;

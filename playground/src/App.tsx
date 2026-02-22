@@ -61,6 +61,7 @@ export function App() {
   const [shEnabled, setShEnabled] = useState(() => getSavedState()?.shEnabled ?? true);
   const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? false);
   const [hoverEnabled, setHoverEnabled] = useState(false);
+  const [cameraControlMode, setCameraControlMode] = useState<'orbit' | 'fly'>('orbit');
   const [splatData, setSplatData] = useState<SplatData | null>(null);
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
@@ -169,6 +170,7 @@ export function App() {
             shEnabled={shEnabled}
             turntable={turntable}
             hoverEnabled={hoverEnabled}
+            cameraControlMode={cameraControlMode}
             onLoad={handleLoad}
             onError={handleError}
             onStats={handleStats}
@@ -187,6 +189,8 @@ export function App() {
         onTurntableChange={setTurntable}
         hoverEnabled={hoverEnabled}
         onHoverChange={setHoverEnabled}
+        cameraControlMode={cameraControlMode}
+        onCameraControlModeChange={setCameraControlMode}
       />
 
       <BottomBar
@@ -194,6 +198,7 @@ export function App() {
         openDetail={openDetail}
         onOpenDetailChange={setOpenDetail}
         hasScene={!!src}
+        cameraControlMode={cameraControlMode}
       />
 
       <DetailPanels

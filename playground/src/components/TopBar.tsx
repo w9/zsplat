@@ -9,6 +9,8 @@ export function TopBar({
   onTurntableChange,
   hoverEnabled,
   onHoverChange,
+  cameraControlMode,
+  onCameraControlModeChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -18,6 +20,8 @@ export function TopBar({
   onTurntableChange: (v: boolean) => void;
   hoverEnabled: boolean;
   onHoverChange: (v: boolean) => void;
+  cameraControlMode: 'orbit' | 'fly';
+  onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
 }) {
   return (
     <header className="absolute top-0 left-0 right-0 z-10 bg-transparent pointer-events-none [&>*]:pointer-events-auto">
@@ -30,6 +34,8 @@ export function TopBar({
         onTurntableChange={onTurntableChange}
         hoverEnabled={hoverEnabled}
         onHoverChange={onHoverChange}
+        cameraControlMode={cameraControlMode}
+        onCameraControlModeChange={onCameraControlModeChange}
       />
     </header>
   );

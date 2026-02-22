@@ -1,5 +1,5 @@
 import { Icon } from '@mdi/react';
-import { mdiCursorDefaultClick, mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
+import { mdiAirplane, mdiCursorDefaultClick, mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,8 @@ export function Toolbar({
   onTurntableChange,
   hoverEnabled,
   onHoverChange,
+  cameraControlMode,
+  onCameraControlModeChange,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -24,6 +26,8 @@ export function Toolbar({
   onTurntableChange: (v: boolean) => void;
   hoverEnabled: boolean;
   onHoverChange: (v: boolean) => void;
+  cameraControlMode: 'orbit' | 'fly';
+  onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
 }) {
   return (
     <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 shrink-0">
@@ -71,6 +75,18 @@ export function Toolbar({
         >
           <Icon path={mdiCursorDefaultClick} size={iconSize} />
           Hover
+        </Toggle>
+      )}
+      {hasScene && (
+        <Toggle
+          pressed={cameraControlMode === 'fly'}
+          onPressedChange={(p) => onCameraControlModeChange(p ? 'fly' : 'orbit')}
+          variant="outline"
+          size="sm"
+          title={cameraControlMode === 'fly' ? 'Fly (left drag: look around)' : 'Orbit (left drag: rotate around target)'}
+        >
+          <Icon path={mdiAirplane} size={iconSize} />
+          Fly
         </Toggle>
       )}
     </div>
