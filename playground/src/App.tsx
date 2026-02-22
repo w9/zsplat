@@ -121,7 +121,7 @@ export function App() {
     setDragging(false);
     const file = e.dataTransfer.files[0];
     const name = file?.name?.toLowerCase() ?? '';
-    if (file && (name.endsWith('.ply') || name.endsWith('.spz') || name.endsWith('.rad'))) handleFile(file);
+    if (file && (name.endsWith('.ply') || name.endsWith('.spz'))) handleFile(file);
   }, [handleFile]);
 
   useEffect(() => {
@@ -154,7 +154,7 @@ export function App() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".ply,.spz,.rad"
+        accept=".ply,.spz"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

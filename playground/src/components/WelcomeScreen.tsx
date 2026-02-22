@@ -15,7 +15,7 @@ export function WelcomeScreen({ onOpen }: { onOpen: () => void }) {
           className="mt-5 h-auto py-2.5 px-7 text-[15px] font-semibold rounded-lg"
           onClick={onOpen}
         >
-          Open PLY, SPZ or RAD
+          Open PLY or SPZ
         </Button>
       <div className="mt-3 text-xs text-muted-foreground/70">or drag and drop</div>
     </div>

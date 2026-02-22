@@ -52,7 +52,7 @@ export function Toolbar({
         onClick={onOpen}
       >
         <Icon path={mdiFolderOpen} size={iconSize} />
-        Open PLY/SPZ/RAD
+        Open PLY/SPZ
       </Button>
       {hasScene && (
         <Toggle

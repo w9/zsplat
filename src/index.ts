@@ -8,7 +8,7 @@ export { loadCompressedPly } from './loaders/compressed-ply-loader';
 export { loadStandardPly } from './loaders/standard-ply-loader';
 export { loadSog, loadSogFromFiles, isSogFile } from './loaders/sog-loader';
 export { loadSpz, isSpzFile } from './loaders/spz-loader';
-export { loadRad, isRadFile } from './loaders/rad-loader';
+// export { loadRad, isRadFile } from './loaders/rad-loader';
 
 export type {
   SplatData,
@@ -29,14 +29,13 @@ import { loadCompressedPly } from './loaders/compressed-ply-loader';
 import { loadStandardPly } from './loaders/standard-ply-loader';
 import { loadSog, isSogFile } from './loaders/sog-loader';
 import { loadSpz, isSpzFile } from './loaders/spz-loader';
-import { loadRad, isRadFile } from './loaders/rad-loader';
+// import { loadRad, isRadFile } from './loaders/rad-loader';
 import type { SplatData } from './types';
 
 /**
  * Convenience loader that auto-detects format:
  * - SOG (meta.json URL) → fetches webp textures and decompresses
  * - SPZ (.spz URL or File) → gzip decompress and parse Niantic format
- * - RAD (.rad URL or File) → Spark RAD format (chunked, gzipped properties)
  * - Compressed PLY → decompresses packed data
  * - Standard PLY → reads float properties
  *
@@ -82,10 +81,6 @@ export async function loadSplat(source: string | File): Promise<SplatData> {
   if (isSpzFile(name)) {
     return loadSpz(buffer);
   }
-  if (isRadFile(name)) {
-    return loadRad(buffer);
-  }
-
   const ply = parsePlyHeader(buffer);
   if (isCompressedPly(ply)) {
     return loadCompressedPly(buffer, ply);
