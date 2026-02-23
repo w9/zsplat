@@ -1,47 +1,118 @@
 # ZSplat
 
-WebGPU renderer for SuperSplat-style compressed Gaussian splats.
+WebGPU renderer for Gaussian splats, with a React component, loaders, and a playground.
 
-## Install
+This repository contains:
+- the published `zsplat` package (from `src/`)
+- an interactive playground app (`playground/`)
+- a learning visualizer for GPU radix sort (`radix-sort-visualized/`)
+- static site outputs under `docs/`
+
+## Package install
 
 ```bash
 pnpm add zsplat
 ```
 
-## Basic Usage (Vanilla)
-
-```ts
-import { ZSplat } from "zsplat";
-
-const canvas = document.querySelector("canvas");
-const splat = new ZSplat();
-await splat.init(canvas);
-
-const buffer = await fetch("/path/to/file.ply").then((r) => r.arrayBuffer());
-await splat.loadPly(buffer);
-
-function frame() {
-  splat.render();
-  requestAnimationFrame(frame);
-}
-frame();
-```
-
-## React
+## React usage
 
 ```tsx
-import { ZSplatView } from "zsplat/react";
+import { ZSplat } from "zsplat";
 
 export function Viewer() {
-  return <ZSplatView url="/model.ply" style={{ width: "100%", height: "100%" }} />;
+  return (
+    <ZSplat
+      src="/models/scene.ply"
+      className="w-full h-screen"
+      sortMethod="gpu-subgroup"
+      turntable
+    />
+  );
 }
 ```
 
-## Playground
+`src` accepts either:
+- a URL string
+- a `File` object
+
+Supported load formats in the package:
+- standard/compressed PLY
+- SPZ
+- SOG (`meta.json` URL)
+
+## Loader usage (without React)
+
+```ts
+import { loadSplat } from "zsplat";
+
+const data = await loadSplat("/models/scene.spz");
+console.log(data.count);
+```
+
+## Sorting modes
+
+`ZSplat` supports:
+- `gpu-subgroup` (default): stable, subgroup-optimized path when supported
+- `gpu`: stable portable path
+- `gpu-unstable`: unstable GPU path
+- `cpu`: CPU fallback
+
+## Repo layout
+
+- `src/` - library source (renderer, camera, shaders, loaders, React component)
+- `playground/` - interactive viewer app for local files and URL loading
+- `radix-sort-visualized/` - educational app explaining GPU radix sort
+- `docs/` - static build outputs:
+  - `docs/playground/`
+  - `docs/radix-sort-visualized/`
+
+## Development
+
+From repo root:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open the dev server and load a PLY from the UI.
+This runs the playground dev server.
+
+Run the radix visualizer locally:
+
+```bash
+pnpm --dir radix-sort-visualized dev
+```
+
+## Build commands
+
+From repo root:
+
+```bash
+pnpm build
+```
+
+Builds the `zsplat` package to `dist/`.
+
+```bash
+pnpm build:docs
+```
+
+Builds both apps as static sites:
+- playground -> `docs/playground/`
+- radix visualizer -> `docs/radix-sort-visualized/`
+
+```bash
+pnpm preview
+```
+
+Previews the playground build.
+
+## Playground quick notes
+
+The playground top bar currently includes:
+- open local `.ply` / `.spz`
+- load by URL (and `?src=...` query param auto-load)
+- sort mode selector
+- camera mode/turntable controls
+- link to radix sort learning page
+- link to this GitHub repository

@@ -1,5 +1,5 @@
 import { Icon } from '@mdi/react';
-import { mdiAirplane, mdiBookOpenPageVariant, mdiCursorDefaultClick, mdiFolderOpen, mdiLink, mdiRotate360, mdiSphere } from '@mdi/js';
+import { mdiAirplane, mdiBookOpenPageVariant, mdiCursorDefaultClick, mdiFolderOpen, mdiGithub, mdiLink, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -84,6 +84,12 @@ export function Toolbar({
         <a href="../radix-sort-visualized/" title="Open radix sort visualizer">
           <Icon path={mdiBookOpenPageVariant} size={iconSize} />
           How does GPU radix sort work?
+        </a>
+      </Button>
+      <Button asChild variant="outline" size="sm">
+        <a href="https://github.com/w9/zsplat" target="_blank" rel="noreferrer" title="Open zsplat on GitHub">
+          <Icon path={mdiGithub} size={iconSize} />
+          GitHub
         </a>
       </Button>
       {hasScene && (
