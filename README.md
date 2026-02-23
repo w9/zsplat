@@ -1,6 +1,11 @@
 # ZSplat
 
-WebGPU renderer for Gaussian splats, with a React component, loaders, and a playground.
+WebGPU renderer for Gaussian splats with optimized GPU radix sorting (portable and subgroup-optimized paths), plus a React component, loaders, and an interactive playground.
+
+## Live demos
+
+- Playground demo: <https://w9.github.io/zsplat/playground/?src=https://d28zzqy0iyovbz.cloudfront.net/cf6ac78e/v1/scene.compressed.ply>
+- GPU radix sort visualizer: <https://w9.github.io/zsplat/radix-sort-visualized/>
 
 This repository contains:
 - the published `zsplat` package (from `src/`)
