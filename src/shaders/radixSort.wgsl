@@ -51,7 +51,7 @@ fn histogram(
     let i = tileStart + lid.x * ELEMENTS_PER_THREAD + t;
     if (i < su.numElements) {
       let key = keysIn[i];
-      let digit = (key >> su.bitOffset) & 0xFu;
+      let digit = (key >> su.bitOffset) & (RADIX - 1u);
       atomicAdd(&localHist[digit], 1u);
     }
   }
@@ -156,7 +156,7 @@ fn scatter(
     if (i < su.numElements) {
       let key = keysIn[i];
       let val = select(valsIn[i], i, su.isFirstPass != 0u);
-      let digit = (key >> su.bitOffset) & 0xFu;
+      let digit = (key >> su.bitOffset) & (RADIX - 1u);
       let dest = atomicAdd(&localOffsets[digit], 1u);
       keysOut[dest] = key;
       valsOut[dest] = val;
@@ -200,7 +200,7 @@ fn stableScatter(
     if (i < su.numElements) {
       myKey = keysIn[i];
       myVal = select(valsIn[i], i, su.isFirstPass != 0u);
-      myDigit = (myKey >> su.bitOffset) & 0xFu;
+      myDigit = (myKey >> su.bitOffset) & (RADIX - 1u);
     }
 
     // Publish digit so all threads can see each other's digits
@@ -265,7 +265,7 @@ fn stableBlockSum(
     var myDigit = RADIX;
     if (i < su.numElements) {
       let key = keysIn[i];
-      myDigit = (key >> su.bitOffset) & 0xFu;
+      myDigit = (key >> su.bitOffset) & (RADIX - 1u);
     }
 
     sharedDigits[lid.x] = myDigit;
@@ -327,7 +327,7 @@ fn stableReorder(
 
   let key = keysIn[i];
   let val = select(valsIn[i], i, su.isFirstPass != 0u);
-  let digit = (key >> su.bitOffset) & 0xFu;
+  let digit = (key >> su.bitOffset) & (RADIX - 1u);
   let localPrefix = localPrefixBuf[i];
   // histBuf stores per-source-workgroup offsets; reorder dispatch workgroups
   // are independent, so derive source WG from element index.

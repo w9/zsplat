@@ -30,10 +30,10 @@ export function StatsPanel({
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground/90">
         <span className={cn(statClass, 'w-[5.5rem]')}>{fmt(stats.numSplats)} splats</span>
         {stats.loadTimeMs > 0 && (
-          <span className={cn(statClass, 'w-[5rem]')}>{Math.round(stats.loadTimeMs)} ms load</span>
+          <span className={cn(statClass, 'w-[5.9rem]')}>{Math.round(stats.loadTimeMs)} ms load</span>
         )}
         {stats.gpuMemoryBytes > 0 && (
-          <span className={cn(statClass, 'w-[4.5rem]')}>{fmtB(stats.gpuMemoryBytes)} GPU</span>
+          <span className={cn(statClass, 'w-[5.5rem]')}>{fmtB(stats.gpuMemoryBytes)} GPU</span>
         )}
         {!fpsOpen && (
           <Button

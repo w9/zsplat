@@ -398,8 +398,9 @@ export class Camera {
     if (e.buttons & 2 || e.buttons & 4 || (e.buttons & 1 && e.shiftKey)) {
       // Right-click or middle-click or shift+left: pan
       const panScale = this.radius * 0.001;
-      this.vPanX -= dx * panScale;
-      this.vPanY += dy * panScale;
+      // Invert drag pan direction for right/middle/shift pan interactions.
+      this.vPanX += dx * panScale;
+      this.vPanY -= dy * panScale;
       this.dirty = true;
     } else if (e.buttons & 1) {
       // Left-click: orbit

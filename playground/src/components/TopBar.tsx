@@ -13,6 +13,9 @@ export function TopBar({
   onCameraControlModeChange,
   sortMode,
   onSortModeChange,
+  urlInput,
+  onUrlInputChange,
+  onUrlLoad,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -26,6 +29,9 @@ export function TopBar({
   onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
   sortMode: 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable';
   onSortModeChange: (v: 'cpu' | 'gpu' | 'gpu-subgroup' | 'gpu-unstable') => void;
+  urlInput: string;
+  onUrlInputChange: (v: string) => void;
+  onUrlLoad: () => void;
 }) {
   return (
     <header className="absolute top-0 left-0 right-0 z-10 bg-transparent pointer-events-none [&>*]:pointer-events-auto">
@@ -42,6 +48,9 @@ export function TopBar({
         onCameraControlModeChange={onCameraControlModeChange}
         sortMode={sortMode}
         onSortModeChange={onSortModeChange}
+        urlInput={urlInput}
+        onUrlInputChange={onUrlInputChange}
+        onUrlLoad={onUrlLoad}
       />
     </header>
   );

@@ -79,6 +79,8 @@ export function ZSplat({ src, style, className, camera, shEnabled = true, turnta
         });
 
         const renderer = new SplatRenderer({ camera: cam, sort: sortMethod });
+        renderer.turntableSpeed = turntable ? TURNTABLE_SPEED : 0;
+        renderer.shEnabled = shEnabled;
         rendererRef.current = renderer;
 
         // Size the canvas to CSS layout dimensions

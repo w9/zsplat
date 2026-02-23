@@ -22,7 +22,7 @@ const hmrState: HmrSavedState = {
   src: null,
   stats: null,
   shEnabled: true,
-  turntable: false,
+  turntable: true,
 };
 
 const HMR_DEBUG = import.meta.env.DEV && typeof window !== 'undefined';
@@ -52,6 +52,20 @@ function getSavedState(): HmrSavedState | undefined {
   return saved;
 }
 
+function isValidSplatUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return pathname.endsWith('.ply') || pathname.endsWith('.spz');
+  } catch {
+    return false;
+  }
+}
+
+function getInitialUrlFromParams(): string {
+  const params = new URLSearchParams(location.search);
+  return params.get('src') ?? '';
+}
+
 export function App() {
   const [src, setSrc] = useState<string | File | null>(() => getSavedState()?.src ?? null);
   const [stats, setStats] = useState<SplatStats | null>(() => getSavedState()?.stats ?? null);
@@ -59,27 +73,42 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [shEnabled, setShEnabled] = useState(() => getSavedState()?.shEnabled ?? true);
-  const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? false);
+  const [turntable, setTurntable] = useState(() => getSavedState()?.turntable ?? true);
   const [hoverEnabled, setHoverEnabled] = useState(false);
   const [cameraControlMode, setCameraControlMode] = useState<'orbit' | 'fly'>('orbit');
   const [sortMode, setSortMode] = useState<SortMethod>('gpu-subgroup');
   const [splatData, setSplatData] = useState<SplatData | null>(null);
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
+  const [urlInput, setUrlInput] = useState(getInitialUrlFromParams);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fpsSamplesRef = useRef<number[]>([]);
   const openDetailRef = useRef<OpenDetail>(null);
   openDetailRef.current = openDetail;
 
-  const handleFile = useCallback((file: File) => {
+  const resetAndLoad = useCallback((newSrc: string | File) => {
     setError(null);
     setLoading(true);
     setStats(null);
     setSplatData(null);
     setRunningStats(null);
     fpsSamplesRef.current = [];
-    setSrc(file);
+    setSrc(newSrc);
   }, []);
+
+  const handleFile = useCallback((file: File) => {
+    resetAndLoad(file);
+  }, [resetAndLoad]);
+
+  const handleUrlLoad = useCallback(() => {
+    const url = urlInput.trim();
+    if (!url) return;
+    if (!isValidSplatUrl(url)) {
+      setError('Invalid URL: only .ply and .spz URLs are supported.');
+      return;
+    }
+    resetAndLoad(url);
+  }, [urlInput, resetAndLoad]);
 
   const handleLoad = useCallback((info: { numSplats: number; splatData?: SplatData }) => {
     setLoading(false);
@@ -123,6 +152,16 @@ export function App() {
     const name = file?.name?.toLowerCase() ?? '';
     if (file && (name.endsWith('.ply') || name.endsWith('.spz'))) handleFile(file);
   }, [handleFile]);
+
+  useEffect(() => {
+    const initial = getInitialUrlFromParams();
+    if (initial && isValidSplatUrl(initial)) {
+      resetAndLoad(initial);
+    } else if (initial) {
+      setError('Invalid ?src= URL: only .ply and .spz URLs are supported.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     hmrState.src = src;
@@ -195,6 +234,9 @@ export function App() {
         onCameraControlModeChange={setCameraControlMode}
         sortMode={sortMode}
         onSortModeChange={setSortMode}
+        urlInput={urlInput}
+        onUrlInputChange={setUrlInput}
+        onUrlLoad={handleUrlLoad}
       />
 
       <BottomBar

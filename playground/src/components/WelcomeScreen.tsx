@@ -6,8 +6,8 @@ export function WelcomeScreen({ onOpen }: { onOpen: () => void }) {
       <div className="text-5xl font-extrabold tracking-tight mb-2" style={{ letterSpacing: -2 }}>
         ZSplat
       </div>
-      <div className="text-sm text-muted-foreground max-w-[450px] text-center leading-7">
-        Extremely fast 3DGS Renderer powered by WebGPU
+      <div className="text-sm text-muted-foreground max-w-[500px] text-center leading-7">
+        3DGS rendering accelerated by WebGPU radix sort (and nothing else)
       </div>
         <Button
           type="button"

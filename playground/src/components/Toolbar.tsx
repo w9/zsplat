@@ -1,5 +1,5 @@
 import { Icon } from '@mdi/react';
-import { mdiAirplane, mdiCursorDefaultClick, mdiFolderOpen, mdiRotate360, mdiSphere } from '@mdi/js';
+import { mdiAirplane, mdiBookOpenPageVariant, mdiCursorDefaultClick, mdiFolderOpen, mdiLink, mdiRotate360, mdiSphere } from '@mdi/js';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -28,6 +28,9 @@ export function Toolbar({
   onCameraControlModeChange,
   sortMode,
   onSortModeChange,
+  urlInput,
+  onUrlInputChange,
+  onUrlLoad,
 }: {
   onOpen: () => void;
   hasScene: boolean;
@@ -41,6 +44,9 @@ export function Toolbar({
   onCameraControlModeChange: (v: 'orbit' | 'fly') => void;
   sortMode: SortMode;
   onSortModeChange: (v: SortMode) => void;
+  urlInput: string;
+  onUrlInputChange: (v: string) => void;
+  onUrlLoad: () => void;
 }) {
   return (
     <div className="p-2.5 px-4 flex flex-wrap items-center gap-3 shrink-0">
@@ -54,9 +60,30 @@ export function Toolbar({
         <Icon path={mdiFolderOpen} size={iconSize} />
         Open PLY/SPZ
       </Button>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="text"
+          placeholder="https://…/model.ply"
+          value={urlInput}
+          onChange={(e) => onUrlInputChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && urlInput.trim()) onUrlLoad(); }}
+          className="h-8 rounded-md border bg-background px-2 text-sm shadow-xs w-56 outline-none focus:ring-1 focus:ring-ring"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onUrlLoad}
+          disabled={!urlInput.trim()}
+        >
+          <Icon path={mdiLink} size={iconSize} />
+          Load URL
+        </Button>
+      </div>
       <Button asChild variant="outline" size="sm">
         <a href="../radix-sort-visualized/" title="Open radix sort visualizer">
-          Radix Sort Visualization
+          <Icon path={mdiBookOpenPageVariant} size={iconSize} />
+          How does GPU radix sort work?
         </a>
       </Button>
       {hasScene && (

@@ -5,26 +5,39 @@ import radixSortSubgroupWGSL from '../shaders/radixSortSubgroup.wgsl?raw';
 const WG_SIZE = 256;
 const ELEMENTS_PER_THREAD = 16;
 const TILE_SIZE = WG_SIZE * ELEMENTS_PER_THREAD; // 4096
-const RADIX = 16;
-const NUM_PASSES = 8;
+
+const VARIANT_CONFIG = {
+  portable: { radix: 16, numPasses: 8, bitsPerPass: 4 },
+  subgroup: { radix: 256, numPasses: 4, bitsPerPass: 8 },
+} as const;
+
+function patchRadix(wgsl: string, radix: number): string {
+  return wgsl.replace(/const RADIX: u32 = \d+u;/, `const RADIX: u32 = ${radix}u;`);
+}
 
 /**
  * Stable GPU Radix Sort.
- * Uses the same histogram and prefix-sum shaders as RadixSort,
- * but replaces the scatter with a deterministic wave-based algorithm
- * that preserves element order within identical-digit buckets.
+ *
+ * 'portable' variant: RADIX=16, 8 passes of 4 bits, separated scatter
+ *   (stableBlockSum → prefixSum → stableReorder).
+ * 'subgroup' variant: RADIX=256, 4 passes of 8 bits, fused scatter
+ *   (histogram → prefixSum → stableScatterSubgroup).
  */
 export type ScatterVariant = 'portable' | 'subgroup';
 
 export class StableRadixSort implements Sorter {
   private device: GPUDevice;
+  private radix: number;
+  private numPasses: number;
+  private bitsPerPass: number;
+
   private prefixSumPipeline!: GPUComputePipeline;
 
-  // Portable/subgroup: fused scatter (histogram → prefixSum → stableScatter)
+  // Fused scatter path (histogram → prefixSum → stableScatter/stableScatterSubgroup)
   private histogramPipeline!: GPUComputePipeline;
   private stableScatterPipeline!: GPUComputePipeline;
 
-  // Optimized path: separated scatter (stableBlockSum → prefixSum → stableReorder)
+  // Separated scatter path (stableBlockSum → prefixSum → stableReorder)
   private stableBlockSumPipeline!: GPUComputePipeline;
   private stableReorderPipeline!: GPUComputePipeline;
 
@@ -35,42 +48,40 @@ export class StableRadixSort implements Sorter {
   private keysB!: GPUBuffer;
   private valsB!: GPUBuffer;
   private histogramBuf!: GPUBuffer;
-  private localPrefixBuf!: GPUBuffer | null;
+  private localPrefixBuf: GPUBuffer | null = null;
 
   private passUniformBufs: GPUBuffer[] = [];
   private capacity = 0;
 
   /**
    * @param device  GPU device
-   * @param variant 'portable' always uses the serial-rank scatter;
-   *                'subgroup' uses the subgroup-aware scatter if the device
-   *                supports it, otherwise falls back to portable.
+   * @param variant 'portable' uses RADIX=16 with separated scatter;
+   *                'subgroup' uses RADIX=256 with subgroup-accelerated fused scatter
+   *                (falls back to portable if device lacks subgroups).
    */
   constructor(device: GPUDevice, variant: ScatterVariant = 'portable') {
     this.device = device;
-    this.createPipelines(variant);
-  }
 
-  private createPipelines(variant: ScatterVariant) {
-    const baseModule = this.device.createShaderModule({ code: radixSortWGSL });
-    const hasSubgroups = this.device.features.has('subgroups' as GPUFeatureName);
-    const useSubgroup = variant === 'subgroup' && hasSubgroups;
+    const hasSubgroups = device.features.has('subgroups' as GPUFeatureName);
+    const effectiveVariant = (variant === 'subgroup' && !hasSubgroups) ? 'portable' : variant;
     if (variant === 'subgroup' && !hasSubgroups) {
       console.warn('[StableRadixSort] subgroup scatter requested but device lacks "subgroups" feature; falling back to portable path.');
     }
 
-    // Separated scatter path (stableBlockSum + stableReorder) is always available
-    this.useSeparatedScatter = true;
-    this.stableBlockSumPipeline = this.device.createComputePipeline({
-      layout: 'auto',
-      compute: { module: baseModule, entryPoint: 'stableBlockSum' },
-    });
-    this.stableReorderPipeline = this.device.createComputePipeline({
-      layout: 'auto',
-      compute: { module: baseModule, entryPoint: 'stableReorder' },
+    const config = VARIANT_CONFIG[effectiveVariant];
+    this.radix = config.radix;
+    this.numPasses = config.numPasses;
+    this.bitsPerPass = config.bitsPerPass;
+    this.useSeparatedScatter = effectiveVariant === 'portable';
+
+    this.createPipelines(effectiveVariant);
+  }
+
+  private createPipelines(variant: 'portable' | 'subgroup') {
+    const baseModule = this.device.createShaderModule({
+      code: patchRadix(radixSortWGSL, this.radix),
     });
 
-    // Keep fused paths for histogram-only and prefix-sum (shared)
     this.histogramPipeline = this.device.createComputePipeline({
       layout: 'auto',
       compute: { module: baseModule, entryPoint: 'histogram' },
@@ -81,22 +92,35 @@ export class StableRadixSort implements Sorter {
       compute: { module: baseModule, entryPoint: 'prefixSum' },
     });
 
-    if (useSubgroup) {
-      const sgModule = this.device.createShaderModule({ code: radixSortSubgroupWGSL });
-      this.stableScatterPipeline = this.device.createComputePipeline({
+    if (variant === 'portable') {
+      this.stableBlockSumPipeline = this.device.createComputePipeline({
         layout: 'auto',
-        compute: { module: sgModule, entryPoint: 'stableScatterSubgroup' },
+        compute: { module: baseModule, entryPoint: 'stableBlockSum' },
       });
-    } else {
+      this.stableReorderPipeline = this.device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: baseModule, entryPoint: 'stableReorder' },
+      });
       this.stableScatterPipeline = this.device.createComputePipeline({
         layout: 'auto',
         compute: { module: baseModule, entryPoint: 'stableScatter' },
       });
+      console.log(`[StableRadixSort] portable path: RADIX=${this.radix}, ${this.numPasses} passes, separated scatter`);
+    } else {
+      const sgModule = this.device.createShaderModule({
+        code: patchRadix(radixSortSubgroupWGSL, this.radix),
+      });
+      this.stableScatterPipeline = this.device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: sgModule, entryPoint: 'stableScatterSubgroup' },
+      });
+      // Not used in subgroup path, but assign for type safety
+      this.stableBlockSumPipeline = this.histogramPipeline;
+      this.stableReorderPipeline = this.histogramPipeline;
+      console.log(`[StableRadixSort] subgroup path: RADIX=${this.radix}, ${this.numPasses} passes, fused scatter`);
     }
 
-    console.log(`[StableRadixSort] scatter path: separated (stableBlockSum → prefixSum → stableReorder), subgroup fallback: ${useSubgroup ? 'subgroup' : 'portable'}`);
-
-    for (let i = 0; i < NUM_PASSES; i++) {
+    for (let i = 0; i < this.numPasses; i++) {
       this.passUniformBufs.push(
         this.device.createBuffer({
           size: 16,
@@ -127,14 +151,18 @@ export class StableRadixSort implements Sorter {
     this.valsB = this.device.createBuffer({ size: bufSize, usage });
 
     this.histogramBuf = this.device.createBuffer({
-      size: RADIX * numWGs * 4,
+      size: this.radix * numWGs * 4,
       usage: GPUBufferUsage.STORAGE,
     });
 
-    this.localPrefixBuf = this.device.createBuffer({
-      size: bufSize,
-      usage: GPUBufferUsage.STORAGE,
-    });
+    if (this.useSeparatedScatter) {
+      this.localPrefixBuf = this.device.createBuffer({
+        size: bufSize,
+        usage: GPUBufferUsage.STORAGE,
+      });
+    } else {
+      this.localPrefixBuf = null;
+    }
   }
 
   getInputBuffers(): { keys: GPUBuffer; values: GPUBuffer } {
@@ -145,8 +173,8 @@ export class StableRadixSort implements Sorter {
     const numWGs = Math.ceil(numElements / TILE_SIZE);
     const numElementWGs = Math.ceil(numElements / WG_SIZE);
 
-    for (let pass = 0; pass < NUM_PASSES; pass++) {
-      const data = new Uint32Array([numElements, pass * 4, numWGs, pass === 0 ? 1 : 0]);
+    for (let pass = 0; pass < this.numPasses; pass++) {
+      const data = new Uint32Array([numElements, pass * this.bitsPerPass, numWGs, pass === 0 ? 1 : 0]);
       this.device.queue.writeBuffer(this.passUniformBufs[pass], 0, data);
     }
 
@@ -155,7 +183,7 @@ export class StableRadixSort implements Sorter {
     let writeKeys = this.keysB;
     let writeVals = this.valsB;
 
-    for (let pass = 0; pass < NUM_PASSES; pass++) {
+    for (let pass = 0; pass < this.numPasses; pass++) {
       const uBuf = this.passUniformBufs[pass];
 
       if (this.useSeparatedScatter && this.localPrefixBuf) {

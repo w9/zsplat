@@ -58,7 +58,7 @@ fn stableScatterSubgroup(
     if (i < su.numElements) {
       myKey = keysIn[i];
       myVal = select(valsIn[i], i, su.isFirstPass != 0u);
-      myDigit = (myKey >> su.bitOffset) & 0xFu;
+      myDigit = (myKey >> su.bitOffset) & (RADIX - 1u);
     }
 
     sharedDigits[lid.x] = myDigit;
