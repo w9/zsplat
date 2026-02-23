@@ -10,6 +10,8 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ErrorOverlay } from './components/ErrorOverlay';
 import { DragOverlay } from './components/DragOverlay';
+import { Button } from './components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
 
 type HmrSavedState = {
   src: string | File | null;
@@ -66,6 +68,34 @@ function getInitialUrlFromParams(): string {
   return params.get('src') ?? '';
 }
 
+function getChromiumMajorVersion(): number | null {
+  if (typeof navigator === 'undefined') return null;
+
+  const uaData = (navigator as Navigator & {
+    userAgentData?: { brands?: Array<{ brand: string; version: string }> }
+  }).userAgentData;
+
+  const brands = uaData?.brands ?? [];
+  const chromiumBrand = brands.find((b) =>
+    /Chrom(e|ium)|Microsoft Edge|Opera/i.test(b.brand),
+  );
+  if (chromiumBrand) {
+    const major = Number.parseInt(chromiumBrand.version, 10);
+    if (Number.isFinite(major)) return major;
+  }
+
+  const ua = navigator.userAgent;
+  const match = ua.match(/(?:Chrome|Chromium|Edg|OPR)\/(\d+)/);
+  if (!match) return null;
+  const major = Number.parseInt(match[1], 10);
+  return Number.isFinite(major) ? major : null;
+}
+
+function isRecommendedBrowserForPerformance(): boolean {
+  const major = getChromiumMajorVersion();
+  return major != null && major >= 145;
+}
+
 export function App() {
   const [src, setSrc] = useState<string | File | null>(() => getSavedState()?.src ?? null);
   const [stats, setStats] = useState<SplatStats | null>(() => getSavedState()?.stats ?? null);
@@ -81,6 +111,7 @@ export function App() {
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
   const [urlInput, setUrlInput] = useState(getInitialUrlFromParams);
+  const [showPerfWarning, setShowPerfWarning] = useState(() => !isRecommendedBrowserForPerformance());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fpsSamplesRef = useRef<number[]>([]);
   const openDetailRef = useRef<OpenDetail>(null);
@@ -261,6 +292,22 @@ export function App() {
       {loading && <LoadingOverlay />}
       {error && <ErrorOverlay message={error} onBack={() => { setError(null); setSrc(null); }} />}
       {dragging && <DragOverlay />}
+      <Dialog open={showPerfWarning} onOpenChange={setShowPerfWarning}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Performance warning</DialogTitle>
+            <DialogDescription>
+              This app uses WebGPU and is optimized for Chromium-based browsers on version 145 or newer.
+              Your current browser may run slower and show degraded performance.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setShowPerfWarning(false)}>
+              Continue anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
