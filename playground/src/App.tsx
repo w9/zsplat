@@ -97,7 +97,10 @@ function isRecommendedBrowserForPerformance(): boolean {
 }
 
 export function App() {
-  const [src, setSrc] = useState<string | File | null>(() => getSavedState()?.src ?? null);
+  const browserMeetsPerfTarget = isRecommendedBrowserForPerformance();
+  const [src, setSrc] = useState<string | File | null>(() =>
+    browserMeetsPerfTarget ? (getSavedState()?.src ?? null) : null,
+  );
   const [stats, setStats] = useState<SplatStats | null>(() => getSavedState()?.stats ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +114,11 @@ export function App() {
   const [openDetail, setOpenDetail] = useState<OpenDetail>(null);
   const [runningStats, setRunningStats] = useState<ReturnType<typeof computeRunningStats>>(null);
   const [urlInput, setUrlInput] = useState(getInitialUrlFromParams);
-  const [showPerfWarning, setShowPerfWarning] = useState(() => !isRecommendedBrowserForPerformance());
+  const [showPerfWarning, setShowPerfWarning] = useState(() => !browserMeetsPerfTarget);
+  const [canLoadModel, setCanLoadModel] = useState(browserMeetsPerfTarget);
+  const [pendingSource, setPendingSource] = useState<string | File | null>(() =>
+    browserMeetsPerfTarget ? null : (getSavedState()?.src ?? null),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fpsSamplesRef = useRef<number[]>([]);
   const openDetailRef = useRef<OpenDetail>(null);
@@ -128,8 +135,12 @@ export function App() {
   }, []);
 
   const handleFile = useCallback((file: File) => {
+    if (!canLoadModel) {
+      setPendingSource(file);
+      return;
+    }
     resetAndLoad(file);
-  }, [resetAndLoad]);
+  }, [canLoadModel, resetAndLoad]);
 
   const handleUrlLoad = useCallback(() => {
     const url = urlInput.trim();
@@ -138,8 +149,12 @@ export function App() {
       setError('Invalid URL: only .ply and .spz URLs are supported.');
       return;
     }
+    if (!canLoadModel) {
+      setPendingSource(url);
+      return;
+    }
     resetAndLoad(url);
-  }, [urlInput, resetAndLoad]);
+  }, [canLoadModel, urlInput, resetAndLoad]);
 
   const handleLoad = useCallback((info: { numSplats: number; splatData?: SplatData }) => {
     setLoading(false);
@@ -181,18 +196,34 @@ export function App() {
     setDragging(false);
     const file = e.dataTransfer.files[0];
     const name = file?.name?.toLowerCase() ?? '';
-    if (file && (name.endsWith('.ply') || name.endsWith('.spz'))) handleFile(file);
-  }, [handleFile]);
+    if (file && (name.endsWith('.ply') || name.endsWith('.spz'))) {
+      if (!canLoadModel) {
+        setPendingSource(file);
+        return;
+      }
+      handleFile(file);
+    }
+  }, [canLoadModel, handleFile]);
 
   useEffect(() => {
     const initial = getInitialUrlFromParams();
     if (initial && isValidSplatUrl(initial)) {
-      resetAndLoad(initial);
+      if (!canLoadModel) {
+        setPendingSource(initial);
+      } else {
+        resetAndLoad(initial);
+      }
     } else if (initial) {
       setError('Invalid ?src= URL: only .ply and .spz URLs are supported.');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canLoadModel]);
+
+  useEffect(() => {
+    if (!canLoadModel || !pendingSource) return;
+    resetAndLoad(pendingSource);
+    setPendingSource(null);
+  }, [canLoadModel, pendingSource, resetAndLoad]);
 
   useEffect(() => {
     hmrState.src = src;
@@ -292,8 +323,13 @@ export function App() {
       {loading && <LoadingOverlay />}
       {error && <ErrorOverlay message={error} onBack={() => { setError(null); setSrc(null); }} />}
       {dragging && <DragOverlay />}
-      <Dialog open={showPerfWarning} onOpenChange={setShowPerfWarning}>
-        <DialogContent>
+      <Dialog
+        open={!canLoadModel || showPerfWarning}
+        onOpenChange={(open) => {
+          if (canLoadModel) setShowPerfWarning(open);
+        }}
+      >
+        <DialogContent showCloseButton={canLoadModel}>
           <DialogHeader>
             <DialogTitle>Performance warning</DialogTitle>
             <DialogDescription>
@@ -302,7 +338,13 @@ export function App() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" onClick={() => setShowPerfWarning(false)}>
+            <Button
+              type="button"
+              onClick={() => {
+                setCanLoadModel(true);
+                setShowPerfWarning(false);
+              }}
+            >
               Continue anyway
             </Button>
           </DialogFooter>
