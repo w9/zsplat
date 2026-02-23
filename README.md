@@ -4,14 +4,8 @@ WebGPU renderer for Gaussian splats with optimized GPU radix sorting (portable a
 
 ## Live demos
 
-- Playground demo: <https://w9.github.io/zsplat/playground/?src=https://d28zzqy0iyovbz.cloudfront.net/cf6ac78e/v1/scene.compressed.ply>
-- GPU radix sort visualizer: <https://w9.github.io/zsplat/radix-sort-visualized/>
-
-This repository contains:
-- the published `zsplat` package (from `src/`)
-- an interactive playground app (`playground/`)
-- a learning visualizer for GPU radix sort (`radix-sort-visualized/`)
-- static site outputs under `docs/`
+- [Playground demo](https://w9.github.io/zsplat/playground/?src=https://d28zzqy0iyovbz.cloudfront.net/cf6ac78e/v1/scene.compressed.ply>)
+- [GPU radix sort visualizer](https://w9.github.io/zsplat/radix-sort-visualized/)
 
 ## Package install
 
