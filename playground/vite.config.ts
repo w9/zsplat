@@ -11,6 +11,8 @@ export default defineConfig({
       // In dev, resolve zsplat from source for HMR
       zsplat: resolve(__dirname, '../src/index.ts'),
     },
+    // Avoid bundling multiple React copies (root vs playground)
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   server: {
     port: 5173,
